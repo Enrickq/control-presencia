@@ -19,6 +19,8 @@ La implementación actual incluye:
 - Abstracción del almacenamiento mediante `EventStore`.
 - Persistencia de eventos en archivos mediante `FileEventStore`.
 - Pruebas unitarias con JUnit y AssertJ.
+- Lectura de eventos almacenados por fecha.
+- Recuperación de fichajes persistidos entre distintas instancias de almacenamiento.
 
 ## Tecnologías
 
@@ -26,6 +28,26 @@ La implementación actual incluye:
 - Maven
 - JUnit 5
 - AssertJ
+
+## Almacenamiento de eventos
+
+La interfaz `EventStore` define las operaciones de registro y
+lectura de eventos de presencia.
+
+`FileEventStore` implementa estas operaciones mediante archivos
+de texto organizados por año y fecha UTC.
+
+Cada evento almacena la marca temporal, el identificador del
+empleado, el identificador del lugar y el tipo de fichaje.
+
+La lectura devuelve objetos `StoredTrackingEvent` y permite:
+
+- Recuperar los eventos correspondientes a una fecha.
+- Mantener el orden de registro.
+- Obtener una lista vacía cuando no existen eventos.
+- Recuperar información utilizando una nueva instancia del almacén.
+
+La implementación se verifica mediante pruebas JUnit y AssertJ.
 
 ## Compilación y pruebas
 
