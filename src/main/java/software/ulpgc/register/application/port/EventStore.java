@@ -1,5 +1,6 @@
-package software.ulpgc.register.io;
+package software.ulpgc.register.application.port;
 
+import software.ulpgc.register.model.StoredTrackingEvent;
 import software.ulpgc.register.model.TrackingEvent;
 
 import java.time.LocalDate;

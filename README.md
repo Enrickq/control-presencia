@@ -21,6 +21,31 @@ La implementación actual incluye:
 - Pruebas unitarias con JUnit y AssertJ.
 - Lectura de eventos almacenados por fecha.
 - Recuperación de fichajes persistidos entre distintas instancias de almacenamiento.
+- Validación de secuencias de entrada y salida mediante un caso de uso.
+- Detección de entradas duplicadas, salidas incoherentes y eventos fuera de orden.
+
+## Validación de fichajes
+
+La aplicación incorpora el caso de uso `RegisterTrackingEvent`,
+encargado de validar los eventos antes de registrarlos.
+
+La validación se realiza por empleado y fecha UTC.
+
+Reglas implementadas:
+
+- Se permite una entrada cuando no existe otra entrada pendiente.
+- Una salida requiere una entrada anterior.
+- No se permiten dos entradas consecutivas.
+- No se permiten dos salidas consecutivas.
+- Los fichajes deben respetar el orden cronológico.
+- Los registros de distintos empleados se validan independientemente.
+
+El caso de uso utiliza la interfaz `EventStore` como puerto de salida,
+manteniendo independiente la lógica de aplicación de la persistencia
+concreta.
+
+La implementación actual no contempla todavía jornadas que crucen
+medianoche, concurrencia de registros ni asignaciones de horarios.
 
 ## Tecnologías
 

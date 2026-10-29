@@ -1,6 +1,4 @@
-package software.ulpgc.register.io;
-
-import software.ulpgc.register.model.TrackingType;
+package software.ulpgc.register.model;
 
 import java.time.Instant;
 

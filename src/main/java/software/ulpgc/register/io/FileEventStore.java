@@ -1,5 +1,7 @@
 package software.ulpgc.register.io;
 
+import software.ulpgc.register.application.port.EventStore;
+import software.ulpgc.register.model.StoredTrackingEvent;
 import software.ulpgc.register.model.TrackingEvent;
 import software.ulpgc.register.model.TrackingType;
 

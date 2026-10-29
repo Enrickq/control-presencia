@@ -2,6 +2,7 @@ package software.ulpgc.register.io;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import software.ulpgc.register.application.port.EventStore;
 import software.ulpgc.register.model.Employee;
 import software.ulpgc.register.model.Place;
 import software.ulpgc.register.model.TrackingEvent;
