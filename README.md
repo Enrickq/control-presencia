@@ -84,11 +84,46 @@ mvn clean test
 
 ## Estructura
 
-- `model`: representación de los datos del dominio.
-- `io`: interfaz y adaptación de la persistencia.
-- `src/test`: pruebas automatizadas.
+- `model`: modelos del dominio y eventos de presencia.
+- `model.schedule`: horarios, tramos y asignaciones.
+- `application.port`: contratos utilizados por los casos de uso.
+- `application.usecase`: operaciones y reglas de aplicación.
+- `io`: adaptadores de persistencia.
+- `src/test`: pruebas automatizadas con JUnit y AssertJ.
 
-## Alcance actual
+## Modelo de horarios
 
-Esta primera versión implementa el registro persistente de eventos. La gestión de horarios, la API HTTP y las interfaces
-de usuario todavía no forman parte de esta versión.
+El sistema incorpora un modelo inicial para representar horarios
+continuos y asignaciones temporales a empleados.
+
+### Tramos horarios
+
+`TimeSlot` representa un intervalo mediante su hora de inicio
+y finalización.
+
+Permite calcular su duración y representar interva<los que cruzan
+medianoche.
+
+### Horarios continuos
+
+`ContinuousSchedule` implementa la interfaz `Schedule`.
+
+Define un único tramo horario y los días de la semana en los
+que debe aplicarse.
+
+Ejemplo: oficina de lunes a viernes, de 08:00 a 16:00.
+
+### Asignaciones
+
+`ScheduleAssignment` relaciona un empleado con un horario
+durante un periodo de fechas.
+
+Los extremos del periodo se consideran incluidos.
+
+### Limitaciones actuales
+
+El modelo todavía no incluye la persistencia de horarios
+y asignaciones, la gestión de solapamientos, los calendarios
+de festivos ni el cálculo efectivo de cumplimiento horario.
+
+Estas funcionalidades se incorporarán en futuras versiones.
