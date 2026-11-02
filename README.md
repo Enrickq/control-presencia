@@ -113,6 +113,33 @@ que debe aplicarse.
 
 Ejemplo: oficina de lunes a viernes, de 08:00 a 16:00.
 
+### Horarios partidos
+
+`SplitSchedule` implementa la interfaz `Schedule` y permite
+representar jornadas laborales divididas en varios tramos.
+
+Ejemplo de restaurante:
+
+- Primer tramo: 10:00–14:00.
+- Segundo tramo: 18:00–22:00.
+- Duración total prevista: 8 horas.
+
+La implementación permite:
+
+- Definir dos o más tramos horarios.
+- Ordenar los tramos cronológicamente.
+- Rechazar intervalos solapados.
+- Exigir un descanso entre tramos.
+- Validar los días laborables.
+- Calcular los minutos de trabajo previstos.
+- Proteger las colecciones frente a modificaciones externas.
+
+Los horarios continuos y partidos implementan el contrato
+`Schedule`, permitiendo utilizar ambas implementaciones
+mediante una misma interfaz.
+
+La implementación se verifica mediante pruebas JUnit y AssertJ.
+
 ### Asignaciones
 
 `ScheduleAssignment` relaciona un empleado con un horario
@@ -122,8 +149,14 @@ Los extremos del periodo se consideran incluidos.
 
 ### Limitaciones actuales
 
-El modelo todavía no incluye la persistencia de horarios
-y asignaciones, la gestión de solapamientos, los calendarios
-de festivos ni el cálculo efectivo de cumplimiento horario.
+El modelo permite representar horarios continuos y partidos,
+pero todavía no incorpora la persistencia de horarios y
+asignaciones ni su administración mediante una interfaz gráfica.
 
-Estas funcionalidades se incorporarán en futuras versiones.
+Los turnos nocturnos, las guardias, los calendarios de festivos
+y el cálculo de cumplimiento horario se incorporarán
+posteriormente.
+
+La validación de solapamientos entre asignaciones y la
+comprobación de referencias a empleados y horarios existentes
+también están pendientes.
