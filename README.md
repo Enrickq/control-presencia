@@ -140,6 +140,55 @@ mediante una misma interfaz.
 
 La implementación se verifica mediante pruebas JUnit y AssertJ.
 
+### Turnos y guardias
+
+`ShiftSchedule` implementa la interfaz `Schedule` y permite
+definir un tramo horario diferente para cada día de la semana.
+
+Los turnos pueden cruzar medianoche.
+
+Ejemplo de hospital:
+
+- Turno de mañana: 06:00–14:00.
+- Turno nocturno: 22:00–06:00 del día siguiente.
+
+El turno se atribuye a su fecha de inicio.
+
+### Guardias
+
+`Duty` representa una guardia asignada a un empleado.
+
+Se distinguen dos modalidades mediante `DutyMode`:
+
+- `ON_SITE`: guardia presencial.
+- `ON_CALL`: guardia localizada.
+
+En la implementación actual, la duración de una guardia
+localizada no se considera automáticamente tiempo de
+presencia efectiva.
+
+La gestión de activaciones de guardias localizadas está
+pendiente de implementación.
+
+### Fichajes nocturnos
+
+`RegisterTrackingEvent` consulta los eventos de la fecha
+UTC actual y de la fecha anterior.
+
+Esto permite registrar salidas al día siguiente de una
+entrada nocturna.
+
+### Limitaciones
+
+- La validación de fichajes utiliza una ventana de dos fechas UTC.
+- Todavía no se contemplan jornadas abiertas durante varios días.
+- Los turnos semanales no incluyen rotaciones de varias semanas.
+- No se gestionan cambios de hora ni zonas horarias de los centros.
+- Las guardias todavía no disponen de persistencia independiente.
+- No se han implementado las activaciones de guardias localizadas.
+- El registro de fichajes todavía no garantiza operaciones
+  concurrentes atómicas.
+
 ### Asignaciones
 
 `ScheduleAssignment` relaciona un empleado con un horario

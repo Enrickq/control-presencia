@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 public record RegisterTrackingEvent(EventStore eventStore) {
 
@@ -19,10 +20,18 @@ public record RegisterTrackingEvent(EventStore eventStore) {
     }
 
     private Optional<StoredTrackingEvent> lastEventOf(TrackingEvent event) {
-        LocalDate day = LocalDate.ofInstant(event.ts(), ZoneOffset.UTC);
+        LocalDate day = LocalDate.ofInstant(
+                event.ts(),
+                ZoneOffset.UTC
+        );
 
-        return eventStore.read(day).stream()
-                .filter(stored -> stored.employeeId().equals(event.employee().id()))
+        return Stream.concat(
+                        eventStore.read(day.minusDays(1)).stream(),
+                        eventStore.read(day).stream()
+                )
+                .filter(stored ->
+                        stored.employeeId().equals(event.employee().id())
+                )
                 .max(Comparator.comparing(StoredTrackingEvent::ts));
     }
 
