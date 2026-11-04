@@ -1,211 +1,274 @@
 # Control de Presencia
 
-Proyecto individual de Ingeniería del Software II de la Universidad de Las Palmas de Gran Canaria.
+Proyecto individual de **Ingeniería del Software II** de la Universidad de Las Palmas de Gran Canaria.
 
 ## Descripción
 
-Sistema de control de presencia orientado al registro de entradas y salidas de empleados, la gestión de horarios y la
-consulta de asistencia.
+Sistema de control de presencia orientado al registro de entradas y salidas de empleados, la definición de horarios laborales y el cálculo de asistencia.
 
-## Estado actual
+El proyecto se desarrolla de forma incremental, partiendo del modelo de registro trabajado en clase y ampliándolo mediante principios de diseño orientado a objetos, pruebas automatizadas y separación de responsabilidades.
 
-Se ha desarrollado el modelo inicial de registro de presencia, tomando como punto de partida el código trabajado en
-clase.
+**Estado:** proyecto en desarrollo. Actualmente se han implementado componentes del modelo de dominio, persistencia de fichajes y validaciones de registro. Las aplicaciones de usuario y la integración completa del sistema están pendientes.
 
-La implementación actual incluye:
+## Funcionalidades implementadas
 
-- Representación de empleados y lugares.
-- Modelado de eventos de entrada y salida.
-- Abstracción del almacenamiento mediante `EventStore`.
-- Persistencia de eventos en archivos mediante `FileEventStore`.
-- Pruebas unitarias con JUnit y AssertJ.
-- Lectura de eventos almacenados por fecha.
-- Recuperación de fichajes persistidos entre distintas instancias de almacenamiento.
-- Validación de secuencias de entrada y salida mediante un caso de uso.
-- Detección de entradas duplicadas, salidas incoherentes y eventos fuera de orden.
+### Registro de presencia
 
-## Validación de fichajes
+- Representación de empleados y lugares mediante `Employee` y `Place`.
+- Modelado de fichajes de entrada y salida con `TrackingEvent` y `TrackingType`.
+- Persistencia de fichajes mediante `FileEventStore`.
+- Lectura de eventos almacenados por fecha UTC.
+- Recuperación de eventos entre distintas instancias del almacén.
+- Validación de secuencias de entrada y salida mediante `RegisterTrackingEvent`.
+- Detección de entradas consecutivas, salidas sin entrada previa y fichajes fuera de orden.
+- Soporte básico para fichajes que cruzan medianoche.
 
-La aplicación incorpora el caso de uso `RegisterTrackingEvent`,
-encargado de validar los eventos antes de registrarlos.
+### Modelo de horarios
 
-La validación se realiza por empleado y fecha UTC.
+- Tramos horarios representados mediante `TimeSlot`.
+- Horarios continuos mediante `ContinuousSchedule`.
+- Horarios partidos mediante `SplitSchedule`.
+- Turnos semanales mediante `ShiftSchedule`.
+- Asignaciones temporales mediante `ScheduleAssignment`.
+- Guardias presenciales y localizadas mediante `Duty` y `DutyMode`.
 
-Reglas implementadas:
+Estas funcionalidades corresponden al modelo y a los casos de uso implementados hasta ahora. Todavía no constituyen un sistema completo de gestión y consulta de asistencia.
 
-- Se permite una entrada cuando no existe otra entrada pendiente.
-- Una salida requiere una entrada anterior.
-- No se permiten dos entradas consecutivas.
-- No se permiten dos salidas consecutivas.
-- Los fichajes deben respetar el orden cronológico.
-- Los registros de distintos empleados se validan independientemente.
+## Arquitectura
 
-El caso de uso utiliza la interfaz `EventStore` como puerto de salida,
-manteniendo independiente la lógica de aplicación de la persistencia
-concreta.
+El proyecto aplica una separación inicial entre dominio, casos de uso, puertos y adaptadores, siguiendo los principios de la arquitectura hexagonal.
 
-La implementación actual no contempla todavía jornadas que crucen
-medianoche, concurrencia de registros ni asignaciones de horarios.
+La lógica de aplicación depende de contratos y no de implementaciones concretas de persistencia.
 
-## Tecnologías
+### Organización del código
 
-- Java 27
-- Maven
-- JUnit 5
-- AssertJ
+```text
+src/
+├── main/
+│   └── java/software/ulpgc/register/
+│       ├── model/
+│       │   └── schedule/
+│       ├── application/
+│       │   ├── port/
+│       │   └── usecase/
+│       └── io/
+└── test/
+    └── java/software/ulpgc/register/
+```
+
+Responsabilidades principales:
+
+- `model`: entidades, eventos y conceptos del dominio.
+- `model.schedule`: horarios, tramos, asignaciones y guardias.
+- `application.port`: contratos utilizados por la lógica de aplicación.
+- `application.usecase`: casos de uso y validaciones.
+- `io`: implementaciones de persistencia.
+- `src/test`: pruebas automatizadas.
+
+### Abstracción de persistencia
+
+`EventStore` define las operaciones necesarias para registrar y consultar eventos.
+
+`FileEventStore` proporciona una implementación basada en archivos.
+
+El caso de uso `RegisterTrackingEvent` utiliza la interfaz `EventStore`, evitando depender directamente de la implementación concreta de almacenamiento.
+
+Esta separación permite sustituir el adaptador de persistencia sin introducir cambios innecesarios en la lógica de aplicación.
 
 ## Almacenamiento de eventos
 
-La interfaz `EventStore` define las operaciones de registro y
-lectura de eventos de presencia.
+`FileEventStore` almacena los fichajes en archivos de texto organizados por año y fecha UTC.
 
-`FileEventStore` implementa estas operaciones mediante archivos
-de texto organizados por año y fecha UTC.
+Cada registro contiene:
 
-Cada evento almacena la marca temporal, el identificador del
-empleado, el identificador del lugar y el tipo de fichaje.
+- Marca temporal.
+- Identificador del empleado.
+- Identificador del lugar.
+- Tipo de fichaje.
 
-La lectura devuelve objetos `StoredTrackingEvent` y permite:
+Los campos se almacenan en líneas de texto delimitadas por tabuladores.
 
-- Recuperar los eventos correspondientes a una fecha.
-- Mantener el orden de registro.
-- Obtener una lista vacía cuando no existen eventos.
-- Recuperar información utilizando una nueva instancia del almacén.
+Los datos se recuperan mediante objetos `StoredTrackingEvent`.
 
-La implementación se verifica mediante pruebas JUnit y AssertJ.
+El almacenamiento permite leer eventos de una fecha determinada y recuperar información previamente persistida.
 
-## Compilación y pruebas
+Este mecanismo constituye la persistencia inicial de fichajes. La persistencia de horarios, asignaciones y guardias todavía no se ha implementado.
 
-Para ejecutar las pruebas desde la raíz del proyecto:
+## Validación de fichajes
 
-```bash
-mvn clean test
+`RegisterTrackingEvent` comprueba la coherencia de una secuencia de fichajes antes de registrar nuevos eventos.
+
+### Reglas implementadas
+
+- Una entrada no puede seguir a otra entrada que todavía no se ha cerrado.
+- Una salida requiere una entrada anterior.
+- No se permiten dos salidas consecutivas.
+- Los nuevos eventos deben respetar el orden cronológico respecto al último evento consultado.
+- La validación se realiza independientemente para cada empleado.
+
+### Fichajes nocturnos
+
+Para validar un nuevo evento, el caso de uso consulta los registros correspondientes a su fecha UTC y a la fecha UTC anterior.
+
+Esto permite reconocer una entrada realizada antes de medianoche y registrar su salida durante el día siguiente.
+
+Ejemplo:
+
+```text
+04/11/2026 22:00 UTC → Entrada
+05/11/2026 06:00 UTC → Salida
 ```
 
-## Estructura
+Esta validación cubre el escenario básico de una jornada nocturna.
 
-- `model`: modelos del dominio y eventos de presencia.
-- `model.schedule`: horarios, tramos y asignaciones.
-- `application.port`: contratos utilizados por los casos de uso.
-- `application.usecase`: operaciones y reglas de aplicación.
-- `io`: adaptadores de persistencia.
-- `src/test`: pruebas automatizadas con JUnit y AssertJ.
+No constituye todavía un mecanismo general para detectar jornadas abiertas durante varios días ni garantiza operaciones concurrentes atómicas.
 
 ## Modelo de horarios
 
-El sistema incorpora un modelo inicial para representar horarios
-continuos y asignaciones temporales a empleados.
+### Contrato `Schedule`
+
+La interfaz `Schedule` define las operaciones compartidas por los distintos tipos de horario.
+
+Entre ellas se encuentran la obtención de tramos para una fecha y el cálculo de minutos previstos.
+
+Las implementaciones reutilizan este contrato, permitiendo utilizar diferentes horarios mediante polimorfismo.
 
 ### Tramos horarios
 
-`TimeSlot` representa un intervalo mediante su hora de inicio
-y finalización.
+`TimeSlot` representa un intervalo mediante una hora de inicio y una hora de finalización.
 
-Permite calcular su duración y representar interva<los que cruzan
-medianoche.
+Permite calcular su duración y reconocer intervalos que cruzan medianoche.
 
 ### Horarios continuos
 
-`ContinuousSchedule` implementa la interfaz `Schedule`.
+`ContinuousSchedule` representa jornadas con un único tramo horario en los días laborables establecidos.
 
-Define un único tramo horario y los días de la semana en los
-que debe aplicarse.
+Ejemplo:
 
-Ejemplo: oficina de lunes a viernes, de 08:00 a 16:00.
+```text
+Lunes a viernes
+08:00–16:00
+Duración prevista: 8 horas
+```
 
 ### Horarios partidos
 
-`SplitSchedule` implementa la interfaz `Schedule` y permite
-representar jornadas laborales divididas en varios tramos.
+`SplitSchedule` representa jornadas divididas en dos o más tramos.
 
 Ejemplo de restaurante:
 
-- Primer tramo: 10:00–14:00.
-- Segundo tramo: 18:00–22:00.
-- Duración total prevista: 8 horas.
+```text
+10:00–14:00 → 4 horas
+18:00–22:00 → 4 horas
 
-La implementación permite:
+Total previsto: 8 horas
+```
 
-- Definir dos o más tramos horarios.
-- Ordenar los tramos cronológicamente.
-- Rechazar intervalos solapados.
-- Exigir un descanso entre tramos.
-- Validar los días laborables.
-- Calcular los minutos de trabajo previstos.
-- Proteger las colecciones frente a modificaciones externas.
+La implementación permite ordenar los tramos cronológicamente, rechazar solapamientos y exigir un descanso entre intervalos.
 
-Los horarios continuos y partidos implementan el contrato
-`Schedule`, permitiendo utilizar ambas implementaciones
-mediante una misma interfaz.
+También protege las colecciones utilizadas para definir los horarios frente a modificaciones externas.
 
-La implementación se verifica mediante pruebas JUnit y AssertJ.
+### Turnos semanales
 
-### Turnos y guardias
+`ShiftSchedule` permite asociar un tramo diferente a cada día de la semana.
 
-`ShiftSchedule` implementa la interfaz `Schedule` y permite
-definir un tramo horario diferente para cada día de la semana.
+Ejemplos:
 
-Los turnos pueden cruzar medianoche.
+```text
+Turno de mañana: 06:00–14:00
+Turno de tarde:  14:00–22:00
+Turno nocturno:  22:00–06:00
+```
 
-Ejemplo de hospital:
+Los turnos nocturnos se atribuyen a la fecha en la que comienzan.
 
-- Turno de mañana: 06:00–14:00.
-- Turno nocturno: 22:00–06:00 del día siguiente.
+El modelo actual permite definir una distribución semanal de turnos, pero todavía no incorpora rotaciones automáticas de varias semanas.
 
-El turno se atribuye a su fecha de inicio.
+### Asignaciones de horarios
+
+`ScheduleAssignment` relaciona un empleado con un horario durante un intervalo de fechas.
+
+El inicio y el final del intervalo se consideran incluidos.
+
+La clase representa la asignación, pero todavía están pendientes su persistencia y las validaciones de integridad entre empleados, horarios y periodos de asignación.
 
 ### Guardias
 
-`Duty` representa una guardia asignada a un empleado.
+`Duty` representa una guardia asociada a un empleado, una fecha de inicio, un tramo horario y una modalidad.
 
-Se distinguen dos modalidades mediante `DutyMode`:
+Se utilizan dos modalidades:
 
 - `ON_SITE`: guardia presencial.
 - `ON_CALL`: guardia localizada.
 
-En la implementación actual, la duración de una guardia
-localizada no se considera automáticamente tiempo de
-presencia efectiva.
+En el modelo actual, una guardia presencial aporta sus minutos previstos de presencia.
 
-La gestión de activaciones de guardias localizadas está
-pendiente de implementación.
+Una guardia localizada representa un periodo de disponibilidad, que no se considera automáticamente tiempo de presencia efectiva.
 
-### Fichajes nocturnos
+Todavía no se gestionan activaciones de guardias localizadas ni su cálculo como trabajo efectivo.
 
-`RegisterTrackingEvent` consulta los eventos de la fecha
-UTC actual y de la fecha anterior.
+## Tecnologías
 
-Esto permite registrar salidas al día siguiente de una
-entrada nocturna.
+- Java 27.
+- Maven.
+- JUnit 5.
+- AssertJ.
+- Git y GitHub.
 
-### Limitaciones
+## Compilación y pruebas
 
-- La validación de fichajes utiliza una ventana de dos fechas UTC.
-- Todavía no se contemplan jornadas abiertas durante varios días.
-- Los turnos semanales no incluyen rotaciones de varias semanas.
-- No se gestionan cambios de hora ni zonas horarias de los centros.
-- Las guardias todavía no disponen de persistencia independiente.
-- No se han implementado las activaciones de guardias localizadas.
-- El registro de fichajes todavía no garantiza operaciones
-  concurrentes atómicas.
+### Requisitos
 
-### Asignaciones
+Disponer de JDK 27 y Maven.
 
-`ScheduleAssignment` relaciona un empleado con un horario
-durante un periodo de fechas.
+Desde la raíz del proyecto, ejecutar:
 
-Los extremos del periodo se consideran incluidos.
+```bash
+mvn clean verify
+```
 
-### Limitaciones actuales
+Este comando compila el proyecto, ejecuta las pruebas automatizadas y verifica la construcción.
 
-El modelo permite representar horarios continuos y partidos,
-pero todavía no incorpora la persistencia de horarios y
-asignaciones ni su administración mediante una interfaz gráfica.
+También puede utilizarse IntelliJ IDEA:
 
-Los turnos nocturnos, las guardias, los calendarios de festivos
-y el cálculo de cumplimiento horario se incorporarán
-posteriormente.
+1. Abrir el proyecto.
+2. Comprobar que está configurado JDK 27.
+3. Abrir el panel de Maven.
+4. Ejecutar `Lifecycle → verify`.
 
-La validación de solapamientos entre asignaciones y la
-comprobación de referencias a empleados y horarios existentes
-también están pendientes.
+Las pruebas existentes cubren el almacenamiento y la recuperación de eventos, las secuencias de fichajes y las reglas de los modelos horarios.
+
+La compilación y las pruebas deben verificarse antes de integrar cambios en la rama principal.
+
+## Estrategia de versiones
+
+El repositorio utiliza dos ramas principales:
+
+- `main`: versiones estables e integradas.
+- `develop`: incorporación y verificación de nuevas funcionalidades.
+
+Los cambios se incorporan progresivamente mediante commits descriptivos.
+
+Los hitos estables pueden identificarse mediante etiquetas de versión.
+
+## Limitaciones actuales
+
+El proyecto continúa en desarrollo. Entre las funcionalidades pendientes se encuentran:
+
+- Backend HTTP y contratos JSON.
+- Aplicación de registro de entradas y salidas.
+- Aplicación de consulta de presencia e incidencias.
+- Aplicación de administración de horarios y asignaciones.
+- Persistencia de horarios, asignaciones y guardias.
+- Cálculo completo de horas trabajadas, retrasos, ausencias y desviaciones.
+- Rotaciones de turnos de varias semanas.
+- Gestión de festivos y calendarios laborales.
+- Tratamiento de zonas horarias y cambios de hora de los centros.
+- Activaciones de guardias localizadas.
+- Validación de jornadas abiertas durante más de dos fechas UTC.
+- Comprobación de solapamientos entre asignaciones.
+- Validación de referencias a empleados y horarios existentes.
+- Garantías de concurrencia en el registro de fichajes.
+- Contenedorización e integración de los componentes del sistema.
+
+Estas limitaciones se irán abordando conforme avance la implementación.
