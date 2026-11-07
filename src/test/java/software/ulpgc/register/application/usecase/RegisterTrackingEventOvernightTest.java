@@ -3,7 +3,7 @@ package software.ulpgc.register.application.usecase;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import software.ulpgc.register.application.port.EventStore;
-import software.ulpgc.register.io.FileEventStore;
+import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
 import software.ulpgc.register.model.Employee;
 import software.ulpgc.register.model.Place;
 import software.ulpgc.register.model.StoredTrackingEvent;
