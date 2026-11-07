@@ -98,6 +98,61 @@ Este mecanismo constituye la persistencia inicial de fichajes. La persistencia d
 
 `RegisterTrackingEvent` comprueba la coherencia de una secuencia de fichajes antes de registrar nuevos eventos.
 
+## Cálculo diario de asistencia
+
+`CalculateDailyAttendance` calcula un resumen de asistencia
+para un empleado, una fecha y una asignación de horario.
+
+El caso de uso utiliza el puerto `EventStore` para obtener los
+fichajes y el contrato `Schedule` para consultar los tramos
+de trabajo previstos.
+
+El resultado se representa mediante `AttendanceSummary`.
+
+### Indicadores
+
+- Minutos previstos.
+- Minutos trabajados.
+- Minutos de retraso.
+- Diferencia entre minutos trabajados y previstos.
+- Estado de asistencia.
+
+Los estados disponibles son `PRESENT`, `ABSENT`, `OFF`,
+`UNSCHEDULED` e `INCOMPLETE`.
+
+### Ejemplo
+
+Horario previsto: 08:00–16:00.
+
+Fichajes registrados:
+
+- Entrada: 08:10.
+- Salida: 16:05.
+
+Resultado:
+
+- Minutos previstos: 480.
+- Minutos trabajados: 475.
+- Retraso: 10 minutos.
+- Diferencia: -5 minutos.
+- Estado: PRESENT.
+
+### Alcance actual
+
+Los periodos de trabajo se atribuyen a la fecha UTC de
+entrada. Para completar un turno nocturno se consultan los
+fichajes de esa fecha y de la siguiente.
+
+Se comprueba que la asignación corresponda al empleado,
+al horario y al periodo solicitado.
+
+El cálculo todavía no gestiona zonas horarias específicas
+de los centros, festivos, permisos, incidencias detalladas
+ni reconstrucción general de fichajes históricos.
+
+Los minutos de una jornada incompleta no deben considerarse
+un resultado definitivo.
+
 ### Reglas implementadas
 
 - Una entrada no puede seguir a otra entrada que todavía no se ha cerrado.
