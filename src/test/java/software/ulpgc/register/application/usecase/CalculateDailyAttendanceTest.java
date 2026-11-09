@@ -218,6 +218,48 @@ class CalculateDailyAttendanceTest {
                 .isEqualTo(AttendanceStatus.UNSCHEDULED);
     }
 
+
+    @Test
+    void shouldNotCountWorkFromTheFollowingDay() {
+        AttendanceSummary result = calculate(
+                MONDAY,
+                officeSchedule(),
+                event("2026-11-02T08:00:00Z", EMPLOYEE, TrackingType.In),
+                event("2026-11-02T16:00:00Z", EMPLOYEE, TrackingType.Out),
+                event("2026-11-03T08:00:00Z", EMPLOYEE, TrackingType.In),
+                event("2026-11-03T16:00:00Z", EMPLOYEE, TrackingType.Out)
+        );
+
+        assertThat(result.workedMinutes()).isEqualTo(480);
+        assertThat(result.expectedMinutes()).isEqualTo(480);
+        assertThat(result.status()).isEqualTo(AttendanceStatus.PRESENT);
+    }
+
+    @Test
+    void shouldMarkExitWithoutEntryAsIncomplete() {
+        AttendanceSummary result = calculate(
+                MONDAY,
+                officeSchedule(),
+                event("2026-11-02T16:00:00Z", EMPLOYEE, TrackingType.Out)
+        );
+
+        assertThat(result.workedMinutes()).isZero();
+        assertThat(result.status()).isEqualTo(AttendanceStatus.INCOMPLETE);
+    }
+
+    @Test
+    void shouldIgnoreUnmatchedExitFromFollowingDay() {
+        AttendanceSummary result = calculate(
+                MONDAY,
+                officeSchedule(),
+                event("2026-11-03T06:00:00Z", EMPLOYEE, TrackingType.Out)
+        );
+
+        assertThat(result.workedMinutes()).isZero();
+        assertThat(result.status()).isEqualTo(AttendanceStatus.ABSENT);
+    }
+
+
     private AttendanceSummary calculate(
             LocalDate date,
             Schedule schedule,

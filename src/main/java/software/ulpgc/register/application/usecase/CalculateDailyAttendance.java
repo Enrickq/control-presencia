@@ -142,8 +142,14 @@ public final class CalculateDailyAttendance
                         ? event.ts()
                         : null;
 
-            } else if (event.type() == TrackingType.Out
-                    && entry != null) {
+            } else if (event.type() == TrackingType.Out) {
+
+                if (entry == null) {
+                    if (event.ts().isBefore(nextDayStart)) {
+                        incomplete = true;
+                    }
+                    continue;
+                }
 
                 if (event.ts().isAfter(entry)) {
                     periods.add(new WorkPeriod(
