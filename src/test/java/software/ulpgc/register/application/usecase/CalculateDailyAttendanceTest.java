@@ -2,18 +2,19 @@ package software.ulpgc.register.application.usecase;
 
 import org.junit.jupiter.api.Test;
 
-import software.ulpgc.register.application.port.EventStore;
-import software.ulpgc.register.model.StoredTrackingEvent;
-import software.ulpgc.register.model.TrackingEvent;
-import software.ulpgc.register.model.TrackingType;
-import software.ulpgc.register.model.attendance.AttendanceStatus;
-import software.ulpgc.register.model.attendance.AttendanceSummary;
-import software.ulpgc.register.model.schedule.ContinuousSchedule;
-import software.ulpgc.register.model.schedule.Schedule;
-import software.ulpgc.register.model.schedule.ScheduleAssignment;
-import software.ulpgc.register.model.schedule.ShiftSchedule;
-import software.ulpgc.register.model.schedule.SplitSchedule;
-import software.ulpgc.register.model.schedule.TimeSlot;
+import software.ulpgc.register.application.port.out.EventStore;
+import software.ulpgc.register.domain.model.StoredTrackingEvent;
+import software.ulpgc.register.domain.model.TrackingEvent;
+import software.ulpgc.register.domain.model.TrackingType;
+import software.ulpgc.register.domain.model.attendance.AttendanceStatus;
+import software.ulpgc.register.domain.model.attendance.AttendanceSummary;
+import software.ulpgc.register.domain.model.schedule.ContinuousSchedule;
+import software.ulpgc.register.domain.model.schedule.Schedule;
+import software.ulpgc.register.domain.model.schedule.ScheduleAssignment;
+import software.ulpgc.register.domain.model.schedule.ShiftSchedule;
+import software.ulpgc.register.domain.model.schedule.SplitSchedule;
+import software.ulpgc.register.domain.model.schedule.TimeSlot;
+
 
 import java.time.DayOfWeek;
 import java.time.Instant;

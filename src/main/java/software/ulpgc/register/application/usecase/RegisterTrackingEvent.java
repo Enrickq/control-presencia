@@ -1,9 +1,9 @@
 package software.ulpgc.register.application.usecase;
 
-import software.ulpgc.register.application.port.EventStore;
-import software.ulpgc.register.model.StoredTrackingEvent;
-import software.ulpgc.register.model.TrackingEvent;
-import software.ulpgc.register.model.TrackingType;
+import software.ulpgc.register.application.port.out.EventStore;
+import software.ulpgc.register.domain.model.StoredTrackingEvent;
+import software.ulpgc.register.domain.model.TrackingEvent;
+import software.ulpgc.register.domain.model.TrackingType;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;

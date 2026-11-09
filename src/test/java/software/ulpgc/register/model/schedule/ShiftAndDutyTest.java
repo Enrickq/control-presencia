@@ -1,6 +1,7 @@
 package software.ulpgc.register.model.schedule;
 
 import org.junit.jupiter.api.Test;
+import software.ulpgc.register.domain.model.schedule.*;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;

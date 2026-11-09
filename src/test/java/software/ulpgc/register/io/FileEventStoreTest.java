@@ -2,12 +2,12 @@ package software.ulpgc.register.io;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import software.ulpgc.register.application.port.EventStore;
+import software.ulpgc.register.application.port.out.EventStore;
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
-import software.ulpgc.register.model.Employee;
-import software.ulpgc.register.model.Place;
-import software.ulpgc.register.model.TrackingEvent;
-import software.ulpgc.register.model.TrackingType;
+import software.ulpgc.register.domain.model.Employee;
+import software.ulpgc.register.domain.model.Place;
+import software.ulpgc.register.domain.model.TrackingEvent;
+import software.ulpgc.register.domain.model.TrackingType;
 
 import java.io.IOException;
 import java.nio.file.Files;

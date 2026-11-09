@@ -1,6 +1,10 @@
 package software.ulpgc.register.model.schedule;
 
 import org.junit.jupiter.api.Test;
+import software.ulpgc.register.domain.model.schedule.ContinuousSchedule;
+import software.ulpgc.register.domain.model.schedule.Schedule;
+import software.ulpgc.register.domain.model.schedule.ScheduleAssignment;
+import software.ulpgc.register.domain.model.schedule.TimeSlot;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;

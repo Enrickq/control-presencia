@@ -1,4 +1,4 @@
-package software.ulpgc.register.model;
+package software.ulpgc.register.domain.model;
 
 import java.time.Instant;
 

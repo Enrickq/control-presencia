@@ -1,4 +1,4 @@
-package software.ulpgc.register.model.attendance;
+package software.ulpgc.register.domain.model.attendance;
 
 import java.time.LocalDate;
 import java.util.Objects;

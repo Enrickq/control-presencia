@@ -1,13 +1,14 @@
 package software.ulpgc.register.application.usecase;
 
-import software.ulpgc.register.application.port.EventStore;
-import software.ulpgc.register.model.StoredTrackingEvent;
-import software.ulpgc.register.model.TrackingType;
-import software.ulpgc.register.model.attendance.AttendanceStatus;
-import software.ulpgc.register.model.attendance.AttendanceSummary;
-import software.ulpgc.register.model.schedule.Schedule;
-import software.ulpgc.register.model.schedule.ScheduleAssignment;
-import software.ulpgc.register.model.schedule.TimeSlot;
+import software.ulpgc.register.application.port.out.EventStore;
+import software.ulpgc.register.domain.model.StoredTrackingEvent;
+import software.ulpgc.register.domain.model.TrackingType;
+import software.ulpgc.register.domain.model.attendance.AttendanceStatus;
+import software.ulpgc.register.domain.model.attendance.AttendanceSummary;
+import software.ulpgc.register.domain.model.schedule.Schedule;
+import software.ulpgc.register.domain.model.schedule.ScheduleAssignment;
+import software.ulpgc.register.domain.model.schedule.TimeSlot;
+import software.ulpgc.register.application.port.in.DailyAttendanceQuery;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -20,7 +21,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-public final class CalculateDailyAttendance {
+public final class CalculateDailyAttendance
+        implements DailyAttendanceQuery {
 
     private final EventStore eventStore;
 
@@ -28,6 +30,7 @@ public final class CalculateDailyAttendance {
         this.eventStore = Objects.requireNonNull(eventStore);
     }
 
+    @Override
     public AttendanceSummary execute(
             String employeeId,
             LocalDate date,

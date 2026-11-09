@@ -1,4 +1,4 @@
-package software.ulpgc.register.model.schedule;
+package software.ulpgc.register.domain.model.schedule;
 
 import java.time.LocalDate;
 import java.util.Objects;
