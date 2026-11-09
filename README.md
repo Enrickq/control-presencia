@@ -36,44 +36,102 @@ Estas funcionalidades corresponden al modelo y a los casos de uso implementados 
 
 ## Arquitectura
 
-El proyecto aplica una separación inicial entre dominio, casos de uso, puertos y adaptadores, siguiendo los principios de la arquitectura hexagonal.
+El proyecto utiliza **arquitectura hexagonal** y está organizado como un proyecto **Maven multimódulo**.
 
-La lógica de aplicación depende de contratos y no de implementaciones concretas de persistencia.
+La separación entre dominio, aplicación e infraestructura permite mantener las reglas de negocio independientes de tecnologías externas, facilitar las pruebas y reducir el acoplamiento.
 
-### Organización del código
+### Organización de módulos
+
+El proyecto está dividido en tres módulos:
+
+- `domain`: contiene el modelo del dominio, incluyendo empleados, fichajes, horarios, guardias y resultados de asistencia.
+- `application`: contiene los casos de uso y los puertos de entrada y salida.
+- `backend`: contiene los adaptadores de infraestructura y alojará los adaptadores HTTP y la configuración de ejecución.
+
+La estructura principal es:
 
 ```text
-src/
-├── main/
-│   └── java/software/ulpgc/register/
-│       ├── model/
+control-presencia/
+├── pom.xml
+├── domain/
+│   ├── pom.xml
+│   └── src/
+│       ├── main/java/software/ulpgc/register/domain/model/
+│       │   ├── attendance/
 │       │   └── schedule/
-│       ├── application/
+│       └── test/java/
+├── application/
+│   ├── pom.xml
+│   └── src/
+│       ├── main/java/software/ulpgc/register/application/
 │       │   ├── port/
+│       │   │   ├── in/
+│       │   │   └── out/
 │       │   └── usecase/
-│       └── io/
-└── test/
-    └── java/software/ulpgc/register/
+│       └── test/java/
+├── backend/
+│   ├── pom.xml
+│   └── src/
+│       ├── main/java/software/ulpgc/register/infrastructure/
+│       │   └── adapter/out/persistence/
+│       └── test/java/
+├── .gitignore
+└── README.md
 ```
 
-Responsabilidades principales:
+### Dirección de dependencias
 
-- `model`: entidades, eventos y conceptos del dominio.
-- `model.schedule`: horarios, tramos, asignaciones y guardias.
-- `application.port`: contratos utilizados por la lógica de aplicación.
-- `application.usecase`: casos de uso y validaciones.
-- `io`: implementaciones de persistencia.
-- `src/test`: pruebas automatizadas.
+Las dependencias entre módulos siguen esta organización:
 
-### Abstracción de persistencia
+```text
+backend ──────► application ──────► domain
+   │
+   └─────────────────────────────► domain
+```
 
-`EventStore` define las operaciones necesarias para registrar y consultar eventos.
+- `domain` no depende de `application` ni de `backend`.
+- `application` depende del dominio y define contratos para interactuar con sistemas externos.
+- `backend` implementa los adaptadores necesarios para conectar la aplicación con la infraestructura.
 
-`FileEventStore` proporciona una implementación basada en archivos.
+Esta separación aplica el principio de inversión de dependencias.
 
-El caso de uso `RegisterTrackingEvent` utiliza la interfaz `EventStore`, evitando depender directamente de la implementación concreta de almacenamiento.
+### Puertos de entrada
 
-Esta separación permite sustituir el adaptador de persistencia sin introducir cambios innecesarios en la lógica de aplicación.
+Los puertos de entrada representan las operaciones disponibles para los consumidores de la aplicación.
+
+Actualmente, `DailyAttendanceQuery` define el contrato para consultar un resumen diario de asistencia.
+
+`CalculateDailyAttendance` implementa dicho contrato.
+
+### Puertos de salida
+
+Los puertos de salida representan servicios externos que necesitan los casos de uso.
+
+`EventStore` define las operaciones necesarias para registrar y consultar eventos de presencia.
+
+Los casos de uso trabajan con este contrato sin depender de una tecnología concreta de persistencia.
+
+### Adaptadores de infraestructura
+
+`FileEventStore` es un adaptador de salida ubicado en `infrastructure.adapter.out.persistence`.
+
+Implementa `EventStore` mediante almacenamiento en archivos.
+
+Esta separación permite sustituir el mecanismo de almacenamiento sin modificar las reglas del dominio ni los casos de uso que utilizan el puerto.
+
+### Casos de uso
+
+- `RegisterTrackingEvent`: valida y registra fichajes de entrada y salida.
+- `CalculateDailyAttendance`: calcula indicadores diarios de asistencia a partir de los fichajes y el horario asignado.
+
+Los casos de uso coordinan operaciones de aplicación, mientras que los modelos del dominio representan los conceptos y reglas de negocio.
+
+### Estado de la arquitectura
+
+La separación multimódulo está implementada y se verifica mediante Maven.
+
+El adaptador HTTP, la configuración de arranque del servidor, las aplicaciones frontend y la integración mediante contenedores y mensajería todavía están pendientes.
+
 
 ## Almacenamiento de eventos
 
@@ -97,6 +155,24 @@ Este mecanismo constituye la persistencia inicial de fichajes. La persistencia d
 ## Validación de fichajes
 
 `RegisterTrackingEvent` comprueba la coherencia de una secuencia de fichajes antes de registrar nuevos eventos.
+
+### Fichajes nocturnos
+
+Para validar un nuevo evento, el caso de uso consulta los registros correspondientes a su fecha UTC y a la fecha UTC anterior.
+
+Esto permite reconocer una entrada realizada antes de medianoche y registrar su salida durante el día siguiente.
+
+Ejemplo:
+
+```text
+04/11/2026 22:00 UTC → Entrada
+05/11/2026 06:00 UTC → Salida
+```
+
+Esta validación cubre el escenario básico de una jornada nocturna.
+
+No constituye todavía un mecanismo general para detectar jornadas abiertas durante varios días ni garantiza operaciones concurrentes atómicas.
+
 
 ## Cálculo diario de asistencia
 
@@ -160,23 +236,6 @@ un resultado definitivo.
 - No se permiten dos salidas consecutivas.
 - Los nuevos eventos deben respetar el orden cronológico respecto al último evento consultado.
 - La validación se realiza independientemente para cada empleado.
-
-### Fichajes nocturnos
-
-Para validar un nuevo evento, el caso de uso consulta los registros correspondientes a su fecha UTC y a la fecha UTC anterior.
-
-Esto permite reconocer una entrada realizada antes de medianoche y registrar su salida durante el día siguiente.
-
-Ejemplo:
-
-```text
-04/11/2026 22:00 UTC → Entrada
-05/11/2026 06:00 UTC → Salida
-```
-
-Esta validación cubre el escenario básico de una jornada nocturna.
-
-No constituye todavía un mecanismo general para detectar jornadas abiertas durante varios días ni garantiza operaciones concurrentes atómicas.
 
 ## Modelo de horarios
 
@@ -281,6 +340,12 @@ Desde la raíz del proyecto, ejecutar:
 ```bash
 mvn clean verify
 ```
+
+Al ejecutar mvn clean verify desde la raíz, Maven construye los módulos domain, application y backend en el orden establecido por sus dependencias.
+
+Las pruebas automatizadas están distribuidas entre los tres módulos. La compilación se considera correcta cuando todos los módulos finalizan con SUCCESS y Maven muestra BUILD SUCCESS.
+
+También es posible ejecutar la verificación desde IntelliJ IDEA utilizando el ciclo verify del proyecto Maven padre.
 
 Este comando compila el proyecto, ejecuta las pruebas automatizadas y verifica la construcción.
 
