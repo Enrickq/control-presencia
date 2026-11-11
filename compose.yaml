@@ -1,0 +1,21 @@
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    ports:
+      - "127.0.0.1:7070:7070"
+
+    environment:
+      PORT: "7070"
+      DATA_DIR: /data/events
+
+    volumes:
+      - presence-data:/data
+
+    restart: unless-stopped
+
+volumes:
+  presence-data:

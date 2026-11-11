@@ -132,6 +132,99 @@ La separación multimódulo está implementada y se verifica mediante Maven.
 
 El adaptador HTTP, la configuración de arranque del servidor, las aplicaciones frontend y la integración mediante contenedores y mensajería todavía están pendientes.
 
+## Backend HTTP y Docker
+
+El proyecto incorpora un backend HTTP desarrollado con Javalin.
+
+El servidor se ejecuta por defecto en el puerto `7070` y expone operaciones JSON para registrar y consultar eventos de presencia.
+
+### Endpoints disponibles
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/v1/health` | Comprueba el estado del servidor |
+| POST | `/api/v1/punches` | Registra un fichaje |
+| GET | `/api/v1/punches` | Consulta fichajes por empleado y fecha |
+
+### Ejemplo de registro
+
+Petición `POST /api/v1/punches`:
+
+```json
+{
+  "employeeId": "EMP-DEMO-001",
+  "employeeName": "Empleado de prueba",
+  "placeId": "OFFICE-DEMO",
+  "placeName": "Oficina de prueba",
+  "type": "IN"
+}
+```
+
+La marca temporal del evento se genera en el servidor.
+
+### Consulta de eventos
+
+Ejemplo:
+
+```text
+GET /api/v1/punches?employeeId=EMP-DEMO-001&date=2026-11-11
+```
+
+La respuesta contiene los eventos registrados para el empleado en la fecha solicitada.
+
+### Respuestas y errores
+
+- `201 Created`: fichaje registrado correctamente.
+- `400 Bad Request`: petición inválida.
+- `409 Conflict`: secuencia de fichajes incoherente.
+
+### Ejecución mediante Docker Compose
+
+Requisitos: Docker Engine y Docker Compose.
+
+Desde la raíz del proyecto:
+
+```bash
+docker compose up --build -d
+```
+
+Para comprobar el estado:
+
+```bash
+docker compose ps
+```
+
+Para consultar los registros:
+
+```bash
+docker compose logs --tail=50 backend
+```
+
+El backend estará disponible en:
+
+`http://localhost:7070`
+
+Para detener el sistema:
+
+```bash
+docker compose down
+```
+
+### Persistencia
+
+`FileEventStore` almacena los fichajes en archivos de texto.
+
+Docker Compose utiliza un volumen persistente para conservar los eventos al reiniciar o recrear el contenedor.
+
+El directorio configurado dentro del contenedor es `/data/events`.
+
+### Limitaciones actuales
+
+La API permite registrar y consultar fichajes, pero todavía no dispone de autenticación, catálogo persistente de empleados, administración HTTP de horarios ni consulta HTTP del cálculo de asistencia.
+
+El servicio se publica únicamente en la interfaz local del equipo durante el desarrollo.
+
+
 
 ## Almacenamiento de eventos
 
