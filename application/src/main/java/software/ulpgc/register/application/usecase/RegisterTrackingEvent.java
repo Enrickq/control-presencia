@@ -4,6 +4,7 @@ import software.ulpgc.register.application.port.out.EventStore;
 import software.ulpgc.register.domain.model.StoredTrackingEvent;
 import software.ulpgc.register.domain.model.TrackingEvent;
 import software.ulpgc.register.domain.model.TrackingType;
+import software.ulpgc.register.application.port.in.RegisterPunchCommand;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -11,7 +12,8 @@ import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-public record RegisterTrackingEvent(EventStore eventStore) {
+public record RegisterTrackingEvent(EventStore eventStore)
+        implements RegisterPunchCommand {
 
     public void execute(TrackingEvent event) {
         Optional<StoredTrackingEvent> previous = lastEventOf(event);
