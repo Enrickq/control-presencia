@@ -9,6 +9,7 @@ import software.ulpgc.register.domain.model.Place;
 import software.ulpgc.register.domain.model.StoredTrackingEvent;
 import software.ulpgc.register.domain.model.TrackingEvent;
 import software.ulpgc.register.domain.model.TrackingType;
+import io.javalin.http.NotFoundResponse;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -24,10 +25,12 @@ public final class ApiServer {
 
     public static Javalin create(
             RegisterPunchCommand register,
-            TrackingEventsQuery query
+            TrackingEventsQuery query,
+            AdministrationHandlers administration
     ) {
         Objects.requireNonNull(register);
         Objects.requireNonNull(query);
+        Objects.requireNonNull(administration);
 
         return Javalin.create(config -> {
 
@@ -99,6 +102,38 @@ public final class ApiServer {
                 );
             });
 
+
+            config.routes.post(
+                    "/api/v1/employees",
+                    administration::createEmployee
+            );
+
+            config.routes.get(
+                    "/api/v1/employees/{id}",
+                    administration::getEmployee
+            );
+
+            config.routes.post(
+                    "/api/v1/schedules",
+                    administration::createSchedule
+            );
+
+            config.routes.get(
+                    "/api/v1/schedules/{id}",
+                    administration::getSchedule
+            );
+
+            config.routes.post(
+                    "/api/v1/assignments",
+                    administration::createAssignment
+            );
+
+            config.routes.get(
+                    "/api/v1/employees/{id}/assignments",
+                    administration::getAssignments
+            );
+
+
             config.routes.exception(
                     IllegalArgumentException.class,
                     (error, ctx) -> {
@@ -127,6 +162,17 @@ public final class ApiServer {
                         ctx.status(409);
                         ctx.json(Map.of(
                                 "error", "CONFLICT",
+                                "message", error.getMessage()
+                        ));
+                    }
+            );
+
+            config.routes.exception(
+                    NotFoundResponse.class,
+                    (error, ctx) -> {
+                        ctx.status(404);
+                        ctx.json(Map.of(
+                                "error", "NOT_FOUND",
                                 "message", error.getMessage()
                         ));
                     }

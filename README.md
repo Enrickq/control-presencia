@@ -224,6 +224,194 @@ La API permite registrar y consultar fichajes, pero todavía no dispone de auten
 
 El servicio se publica únicamente en la interfaz local del equipo durante el desarrollo.
 
+## Administración de empleados, horarios y asignaciones
+
+El sistema incorpora una API HTTP/JSON que permite registrar empleados, definir horarios de trabajo y asignarlos durante periodos de fechas determinados.
+
+La implementación sigue los principios de la arquitectura hexagonal. Los adaptadores HTTP utilizan los puertos de entrada de la aplicación, los casos de uso aplican las reglas de negocio y los adaptadores de persistencia implementan los puertos de salida.
+
+### Endpoints disponibles
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/api/v1/employees` | Registrar un empleado |
+| GET | `/api/v1/employees/{id}` | Consultar un empleado |
+| POST | `/api/v1/schedules` | Registrar un horario |
+| GET | `/api/v1/schedules/{id}` | Consultar un horario |
+| POST | `/api/v1/assignments` | Asignar un horario a un empleado |
+| GET | `/api/v1/employees/{id}/assignments` | Consultar las asignaciones de un empleado |
+
+La dirección base para la ejecución local es `http://localhost:7070`.
+
+### Registro de empleados
+
+Ejemplo de petición `POST /api/v1/employees`:
+
+```json
+{
+  "id": "EMP-S10-001",
+  "name": "Empleado de prueba"
+}
+```
+
+El sistema permite registrar empleados y recuperar sus datos mediante el identificador.
+
+Se ha comprobado que intentar registrar nuevamente un identificador existente produce una respuesta HTTP `409 Conflict`, con el mensaje `Employee already exists`.
+
+### Tipos de horarios
+
+El sistema permite definir y consultar tres tipos de horarios mediante la API.
+
+**Horario continuo (`CONTINUOUS`)**
+
+Representa un único tramo de trabajo durante determinados días de la semana.
+
+Ejemplo: horario de oficina de lunes a viernes, de 08:00 a 16:00.
+
+```json
+{
+  "type": "CONTINUOUS",
+  "id": "OFFICE-S10-001",
+  "name": "Oficina",
+  "slot": {
+    "start": "08:00",
+    "end": "16:00"
+  },
+  "workingDays": [
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY"
+  ]
+}
+```
+
+**Horario partido (`SPLIT`)**
+
+Permite establecer varios tramos de trabajo separados durante una misma jornada.
+
+Ejemplo: horario de restaurante de 10:00 a 14:00 y de 18:00 a 22:00.
+
+```json
+{
+  "type": "SPLIT",
+  "id": "RESTAURANT-S10-001",
+  "name": "Restaurante",
+  "slots": [
+    {
+      "start": "10:00",
+      "end": "14:00"
+    },
+    {
+      "start": "18:00",
+      "end": "22:00"
+    }
+  ],
+  "workingDays": [
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY"
+  ]
+}
+```
+
+**Horario por turnos (`SHIFT`)**
+
+Permite definir tramos de trabajo según el día de la semana, incluidos turnos que cruzan la medianoche.
+
+Ejemplo: turno de hospital que comienza el lunes a las 22:00 y termina el martes a las 06:00.
+
+```json
+{
+  "type": "SHIFT",
+  "id": "HOSPITAL-S10-001",
+  "name": "Hospital",
+  "weeklySlots": {
+    "MONDAY": {
+      "start": "22:00",
+      "end": "06:00"
+    }
+  }
+}
+```
+
+Los tres tipos de horarios se han registrado y recuperado correctamente mediante peticiones HTTP.
+
+### Asignación de horarios
+
+Un horario puede asignarse a un empleado existente para un periodo determinado.
+
+Ejemplo de petición `POST /api/v1/assignments`:
+
+```json
+{
+  "employeeId": "EMP-S10-001",
+  "scheduleId": "OFFICE-S10-001",
+  "validFrom": "2026-11-16",
+  "validThrough": "2026-11-30"
+}
+```
+
+El sistema comprueba que el empleado y el horario existan antes de guardar la asignación.
+
+También impide asignaciones con periodos solapados para el mismo empleado. Se ha comprobado que repetir una asignación incompatible devuelve HTTP `409 Conflict`, con el mensaje `Schedule assignments overlap`.
+
+Las asignaciones registradas pueden recuperarse mediante `GET /api/v1/employees/{id}/assignments`.
+
+### Persistencia de los datos
+
+Los datos administrativos se almacenan mediante adaptadores de infraestructura que utilizan archivos JSON Lines (JSONL).
+
+| Archivo | Información almacenada |
+|---|---|
+| `employees.jsonl` | Empleados registrados |
+| `schedules.jsonl` | Definiciones de horarios |
+| `assignments.jsonl` | Asignaciones de horarios a empleados |
+
+Los archivos se almacenan en el directorio configurado mediante la variable de entorno `DATA_DIR`.
+
+En Docker Compose se utiliza `/data/events`, respaldado por un volumen persistente.
+
+**Comprobación de persistencia realizada:**
+
+1. Se registró un empleado.
+2. Se crearon horarios continuos, partidos y nocturnos.
+3. Se asignó un horario al empleado.
+4. Se eliminó el contenedor mediante `docker compose down`.
+5. Se creó nuevamente mediante `docker compose up -d`.
+6. Se consultaron los registros mediante HTTP.
+
+Después de recrear el contenedor se recuperaron correctamente el empleado, los tres horarios y su asignación.
+
+Esta prueba confirma que los datos comprobados se mantienen entre recreaciones del contenedor, siempre que se conserve el volumen Docker.
+
+### Validaciones y pruebas
+
+Se han comprobado manualmente los siguientes comportamientos:
+
+- Consulta de empleados registrados.
+- Rechazo de identificadores de empleado duplicados.
+- Registro y consulta de horarios continuos.
+- Registro y consulta de horarios partidos.
+- Registro y consulta de turnos nocturnos.
+- Creación y consulta de asignaciones de horarios.
+- Rechazo de periodos de asignación solapados.
+- Recuperación de datos después de recrear el contenedor Docker.
+
+Estas comprobaciones complementan las pruebas automatizadas del proyecto y no las sustituyen.
+
+### Limitaciones actuales
+
+La administración todavía no incluye autenticación, autorización, edición o eliminación de registros.
+
+El almacenamiento JSONL utiliza archivos de solo adición y no proporciona transacciones entre repositorios ni garantías completas de concurrencia entre procesos.
+
+Todavía está pendiente incorporar metadatos de auditoría administrativa, como el usuario responsable de cada operación y su marca temporal.
+
+El registro de fichajes aún no valida automáticamente los empleados contra el catálogo administrativo. La API de asistencia calculada tampoco está conectada todavía a los horarios y asignaciones persistentes.
+
+Quedan pendientes las pruebas HTTP automatizadas, la administración de rotaciones y guardias, y las tres aplicaciones frontend exigidas por el proyecto.
 
 
 ## Almacenamiento de eventos
