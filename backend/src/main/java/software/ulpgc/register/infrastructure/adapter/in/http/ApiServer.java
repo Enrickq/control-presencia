@@ -48,13 +48,13 @@ public final class ApiServer {
                     );
                 }
 
-                String employeeId = required(
+                String employeeId = identifier(
                         request.employeeId(), "employeeId"
                 );
                 String employeeName = required(
                         request.employeeName(), "employeeName"
                 );
-                String placeId = required(
+                String placeId = identifier(
                         request.placeId(), "placeId"
                 );
                 String placeName = required(
@@ -82,7 +82,7 @@ public final class ApiServer {
             });
 
             config.routes.get("/api/v1/punches", ctx -> {
-                String employeeId = required(
+                String employeeId = identifier(
                         ctx.queryParam("employeeId"),
                         "employeeId"
                 );
@@ -178,6 +178,14 @@ public final class ApiServer {
                     }
             );
         });
+    }
+
+    private static String identifier(String value, String field) {
+        // Validate before trimming: control characters cannot enter the TSV event store.
+        if (value != null && value.codePoints().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException(field + " must not contain control characters");
+        }
+        return required(value, field);
     }
 
     private static String required(

@@ -7,12 +7,13 @@ COPY pom.xml .
 COPY domain/pom.xml domain/pom.xml
 COPY application/pom.xml application/pom.xml
 COPY backend/pom.xml backend/pom.xml
+COPY frontend-register/pom.xml frontend-register/pom.xml
 
 COPY domain/src domain/src
 COPY application/src application/src
 COPY backend/src backend/src
 
-RUN mvn -B -DskipTests install \
+RUN mvn -B -pl backend -am -DskipTests install \
     && mvn -B -f backend/pom.xml \
        org.apache.maven.plugins:maven-dependency-plugin:3.6.1:copy-dependencies \
        -DincludeScope=runtime
