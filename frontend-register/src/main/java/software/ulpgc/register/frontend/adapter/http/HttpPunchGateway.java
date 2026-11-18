@@ -1,5 +1,6 @@
 package software.ulpgc.register.frontend.adapter.http;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import software.ulpgc.register.frontend.model.PunchData;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 import static software.ulpgc.register.frontend.port.PunchException.Kind.*;
 
@@ -46,25 +48,32 @@ public final class HttpPunchGateway implements PunchGateway, AutoCloseable {
     }
 
     @Override
-    public PunchReceipt register(PunchData punch) {
+    public CompletableFuture<PunchReceipt> register(PunchData punch) {
         Objects.requireNonNull(punch);
-        HttpResponse<String> response;
+        String body;
         try {
-            HttpRequest request = HttpRequest.newBuilder(endpoint)
-                    .timeout(timeout)
-                    .header("Content-Type", "application/json; charset=UTF-8")
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(punch),
-                            StandardCharsets.UTF_8))
-                    .build();
-            response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            throw new PunchException(UNAVAILABLE, "La espera se ha interrumpido. " + UNCERTAIN, error);
-        } catch (IOException error) {
-            throw new PunchException(UNAVAILABLE,
-                    "No se ha recibido una respuesta del servidor. " + UNCERTAIN, error);
+            body = mapper.writeValueAsString(punch);
+        } catch (JsonProcessingException error) {
+            return CompletableFuture.failedFuture(new PunchException(BAD_REQUEST,
+                    "No se pudo preparar la petición. El fichaje no se ha enviado.", error));
         }
+
+        HttpRequest request = HttpRequest.newBuilder(endpoint)
+                .timeout(timeout)
+                .header("Content-Type", "application/json; charset=UTF-8")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+                .build();
+
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                .exceptionally(error -> {
+                    throw new PunchException(UNAVAILABLE,
+                            "No se ha recibido una respuesta del servidor. " + UNCERTAIN, error);
+                })
+                .thenApply(response -> confirmedReceipt(response, punch));
+    }
+
+    private PunchReceipt confirmedReceipt(HttpResponse<String> response, PunchData punch) {
         if (response.statusCode() != 201) throw failure(response);
         return receipt(response.body(), punch);
     }

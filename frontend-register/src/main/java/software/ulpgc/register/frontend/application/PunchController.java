@@ -7,11 +7,11 @@ import software.ulpgc.register.frontend.port.PunchException;
 import software.ulpgc.register.frontend.port.PunchGateway;
 
 import java.util.Objects;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Submit is invoked on the UI thread; network work runs on the supplied worker. */
+/** Submit is invoked on the UI thread; remote completion is presented through the UI executor. */
 public final class PunchController {
     public interface View {
         void setBusy(boolean busy);
@@ -21,14 +21,12 @@ public final class PunchController {
 
     private final PunchGateway gateway;
     private final View view;
-    private final Executor worker;
     private final Executor ui;
     private final AtomicBoolean busy = new AtomicBoolean();
 
-    public PunchController(PunchGateway gateway, View view, Executor worker, Executor ui) {
+    public PunchController(PunchGateway gateway, View view, Executor ui) {
         this.gateway = Objects.requireNonNull(gateway);
         this.view = Objects.requireNonNull(view);
-        this.worker = Objects.requireNonNull(worker);
         this.ui = Objects.requireNonNull(ui);
     }
 
@@ -49,30 +47,25 @@ public final class PunchController {
         }
         view.setBusy(true);
         try {
-            worker.execute(() -> register(data));
-        } catch (RejectedExecutionException error) {
-            finish(() -> view.showError("No se pudo iniciar el envío. El fichaje no se ha enviado."));
-        }
-    }
-
-    private void register(PunchData data) {
-        Runnable outcome;
-        try {
-            PunchReceipt receipt = Objects.requireNonNull(gateway.register(data));
-            outcome = () -> view.showReceipt(receipt);
-        } catch (PunchException error) {
-            outcome = () -> view.showError(error.getMessage());
+            gateway.register(data).whenComplete((receipt, error) ->
+                    ui.execute(() -> finish(receipt, error)));
         } catch (RuntimeException error) {
-            outcome = () -> view.showError("No se pudo confirmar el fichaje. "
-                    + "Comprueba los registros antes de volver a intentarlo.");
+            finish(null, error);
         }
-        Runnable result = outcome;
-        ui.execute(() -> finish(result));
     }
 
-    private void finish(Runnable outcome) {
+    private void finish(PunchReceipt receipt, Throwable error) {
         busy.set(false);
         view.setBusy(false);
-        outcome.run();
+        if (error == null && receipt != null) view.showReceipt(receipt);
+        else view.showError(message(error));
+    }
+
+    private static String message(Throwable error) {
+        while (error instanceof CompletionException && error.getCause() != null)
+            error = error.getCause();
+        if (error instanceof PunchException failure) return failure.getMessage();
+        return "No se pudo confirmar el fichaje. "
+                + "Comprueba los registros antes de volver a intentarlo.";
     }
 }

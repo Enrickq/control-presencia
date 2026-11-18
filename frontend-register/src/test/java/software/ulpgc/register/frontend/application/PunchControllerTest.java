@@ -11,12 +11,12 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class PunchControllerTest {
-    private final Queue<Runnable> worker = new ArrayDeque<>();
     private final Queue<Runnable> ui = new ArrayDeque<>();
     private final RecordingView view = new RecordingView();
     private final List<PunchData> requests = new ArrayList<>();
@@ -25,19 +25,21 @@ class PunchControllerTest {
 
     @Test
     void blocksRepeatedSubmissionsUntilTheUiReceivesTheServerResult() {
+        CompletableFuture<PunchReceipt> pending = new CompletableFuture<>();
         PunchController controller = new PunchController(data -> {
             requests.add(data);
-            return receipt;
-        }, view, worker::add, ui::add);
+            return pending;
+        }, view, ui::add);
 
         submit(controller);
         submit(controller);
         assertThat(controller.isBusy()).isTrue();
         assertThat(view.busy).isTrue();
-        assertThat(worker).hasSize(1);
-        assertThat(requests).isEmpty();
+        assertThat(requests).hasSize(1);
+        assertThat(ui).isEmpty();
+        assertThat(pending.isDone()).isFalse();
 
-        worker.remove().run();
+        pending.complete(receipt);
         submit(controller);
         assertThat(requests).hasSize(1);
         assertThat(view.receipt).isNull();
@@ -51,32 +53,53 @@ class PunchControllerTest {
     }
 
     @Test
-    void validatesMissingFieldsBeforeDispatchingAnyWork() {
-        PunchController controller = new PunchController(data -> receipt, view, worker::add, ui::add);
+    void presentsAnAlreadyCompletedFutureThroughTheUiExecutor() {
+        PunchController controller = new PunchController(
+                data -> CompletableFuture.completedFuture(receipt), view, ui::add);
+
+        submit(controller);
+        assertThat(view.receipt).isNull();
+        assertThat(view.busy).isTrue();
+        assertThat(controller.isBusy()).isTrue();
+        assertThat(ui).hasSize(1);
+
+        ui.remove().run();
+        assertThat(view.receipt).isEqualTo(receipt);
+        assertThat(view.busy).isFalse();
+        assertThat(controller.isBusy()).isFalse();
+    }
+
+    @Test
+    void validatesMissingFieldsBeforeCallingTheGateway() {
+        PunchController controller = recordingController();
         controller.submit(" ", "Ana", "CENTRO-1", "Oficina", PunchType.IN);
         assertThat(controller.isBusy()).isFalse();
-        assertThat(worker).isEmpty();
+        assertThat(requests).isEmpty();
         assertThat(view.error).contains("identificador del empleado", "obligatorio");
     }
 
     @Test
-    void rejectsControlCharactersBeforeDispatchingAnyWork() {
-        PunchController controller = new PunchController(data -> receipt, view, worker::add, ui::add);
+    void rejectsControlCharactersBeforeCallingTheGateway() {
+        PunchController controller = recordingController();
         controller.submit("EMP\t1", "Ana", "CENTRO-1", "Oficina", PunchType.IN);
         assertThat(controller.isBusy()).isFalse();
-        assertThat(worker).isEmpty();
+        assertThat(requests).isEmpty();
         assertThat(view.error).contains("caracteres de control");
     }
 
     @Test
-    void displaysRemoteFailureRestoresTheViewAndDoesNotRetry() {
+    void displaysWrappedRemoteFailureRestoresTheViewAndDoesNotRetry() {
+        CompletableFuture<PunchReceipt> pending = new CompletableFuture<>();
         PunchController controller = new PunchController(data -> {
             requests.add(data);
-            throw new PunchException(PunchException.Kind.CONFLICT, "Ya hay una entrada abierta.");
-        }, view, worker::add, ui::add);
+            return pending;
+        }, view, ui::add);
 
         submit(controller);
-        worker.remove().run();
+        pending.completeExceptionally(new CompletionException(new PunchException(
+                PunchException.Kind.CONFLICT, "Ya hay una entrada abierta.")));
+        assertThat(view.error).isNull();
+        assertThat(controller.isBusy()).isTrue();
         ui.remove().run();
 
         assertThat(view.error).isEqualTo("Ya hay una entrada abierta.");
@@ -84,20 +107,18 @@ class PunchControllerTest {
         assertThat(view.busy).isFalse();
         assertThat(controller.isBusy()).isFalse();
         assertThat(requests).hasSize(1);
-        assertThat(worker).isEmpty();
+        assertThat(ui).isEmpty();
 
         submit(controller);
-        assertThat(worker).hasSize(1);
+        assertThat(requests).hasSize(2);
     }
 
     @Test
-    void explainsUncertainOutcomeAfterUnexpectedFailureWithoutLeakingInternalDetails() {
-        PunchController controller = new PunchController(data -> {
-            throw new IllegalStateException("internal adapter detail");
-        }, view, worker::add, ui::add);
+    void explainsUncertainOutcomeAfterUnexpectedAsyncFailureWithoutLeakingInternalDetails() {
+        PunchController controller = new PunchController(data -> CompletableFuture.failedFuture(
+                new IllegalStateException("internal adapter detail")), view, ui::add);
 
         submit(controller);
-        worker.remove().run();
         ui.remove().run();
 
         assertThat(view.error).contains("No se pudo confirmar", "antes de volver")
@@ -107,15 +128,35 @@ class PunchControllerTest {
     }
 
     @Test
-    void restoresControlsWhenTheWorkerRejectsTheSubmission() {
-        PunchController controller = new PunchController(data -> receipt, view,
-                task -> { throw new RejectedExecutionException(); }, ui::add);
+    void restoresControlsIfTheGatewayThrowsBeforeReturningAFuture() {
+        PunchController controller = new PunchController(data -> {
+            throw new IllegalStateException("gateway unavailable");
+        }, view, ui::add);
         submit(controller);
 
-        assertThat(view.error).contains("no se ha enviado");
+        assertThat(view.error).contains("No se pudo confirmar").doesNotContain("gateway unavailable");
         assertThat(view.busy).isFalse();
         assertThat(controller.isBusy()).isFalse();
         assertThat(ui).isEmpty();
+    }
+
+    @Test
+    void preservesTypedFailureWhenTheGatewayThrowsSynchronously() {
+        PunchController controller = new PunchController(data -> {
+            throw new PunchException(PunchException.Kind.UNAVAILABLE, "No se ha recibido respuesta.");
+        }, view, ui::add);
+        submit(controller);
+
+        assertThat(view.error).isEqualTo("No se ha recibido respuesta.");
+        assertThat(view.busy).isFalse();
+        assertThat(controller.isBusy()).isFalse();
+    }
+
+    private PunchController recordingController() {
+        return new PunchController(data -> {
+            requests.add(data);
+            return CompletableFuture.completedFuture(receipt);
+        }, view, ui::add);
     }
 
     private void submit(PunchController controller) {

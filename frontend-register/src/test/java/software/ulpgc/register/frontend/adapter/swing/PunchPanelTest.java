@@ -9,8 +9,7 @@ import software.ulpgc.register.frontend.port.PunchException;
 import javax.swing.*;
 import java.awt.*;
 import java.time.Instant;
-import java.util.ArrayDeque;
-import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -39,8 +38,8 @@ class PunchPanelTest {
     }
 
     @Test
-    void buttonSendsDataOutsideTheEdtAndDisplaysTheServerReceiptOnTheEdt() throws Exception {
-        Queue<Runnable> tasks = new ArrayDeque<>();
+    void buttonStartsWithoutWaitingAndPresentsBackgroundCompletionOnTheEdt() throws Exception {
+        CompletableFuture<PunchReceipt> pending = new CompletableFuture<>();
         AtomicReference<PunchPanel> ref = new AtomicReference<>();
         AtomicInteger calls = new AtomicInteger();
 
@@ -48,13 +47,11 @@ class PunchPanelTest {
             PunchPanel panel = filledPanel();
             ref.set(panel);
             panel.bind(new PunchController(data -> {
-                assertThat(SwingUtilities.isEventDispatchThread()).isFalse();
                 assertThat(data.type()).isEqualTo(PunchType.IN);
                 assertThat(data.employeeName()).isEqualTo("Ana García");
                 calls.incrementAndGet();
-                return new PunchReceipt(data.employeeId(), data.placeId(), data.type(),
-                        Instant.parse("2026-11-15T08:10:30Z"));
-            }, edtView(panel), tasks::add, SwingUtilities::invokeLater));
+                return pending;
+            }, edtView(panel), SwingUtilities::invokeLater));
             component(panel, "entry", JButton.class).doClick();
             assertThat(component(panel, "entry", JButton.class).isEnabled()).isFalse();
             assertThat(component(panel, "exit", JButton.class).isEnabled()).isFalse();
@@ -62,8 +59,13 @@ class PunchPanelTest {
             assertThat(component(panel, "status", JTextArea.class).getText()).contains("Enviando");
         });
 
-        assertThat(calls.get()).isZero();
-        tasks.remove().run();
+        assertThat(calls.get()).isOne();
+        assertThat(pending.isDone()).isFalse();
+        SwingUtilities.invokeAndWait(() ->
+                assertThat(component(ref.get(), "status", JTextArea.class).getText()).contains("Enviando"));
+        assertThat(SwingUtilities.isEventDispatchThread()).isFalse();
+        pending.complete(new PunchReceipt("EMP-1", "CENTRO-1", PunchType.IN,
+                Instant.parse("2026-11-15T08:10:30Z")));
         SwingUtilities.invokeAndWait(() -> {
             PunchPanel panel = ref.get();
             assertThat(component(panel, "entry", JButton.class).isEnabled()).isTrue();
@@ -76,19 +78,21 @@ class PunchPanelTest {
 
     @Test
     void failedExitKeepsFormValuesAndAllowsAnotherExplicitAction() throws Exception {
-        Queue<Runnable> tasks = new ArrayDeque<>();
+        CompletableFuture<PunchReceipt> pending = new CompletableFuture<>();
         AtomicReference<PunchPanel> ref = new AtomicReference<>();
+        AtomicInteger calls = new AtomicInteger();
         SwingUtilities.invokeAndWait(() -> {
             PunchPanel panel = filledPanel();
             ref.set(panel);
             panel.bind(new PunchController(data -> {
                 assertThat(data.type()).isEqualTo(PunchType.OUT);
-                throw new PunchException(PunchException.Kind.CONFLICT, "No hay una entrada previa.");
-            }, edtView(panel), tasks::add, SwingUtilities::invokeLater));
+                calls.incrementAndGet();
+                return pending;
+            }, edtView(panel), SwingUtilities::invokeLater));
             component(panel, "exit", JButton.class).doClick();
         });
 
-        tasks.remove().run();
+        pending.completeExceptionally(new PunchException(PunchException.Kind.CONFLICT, "No hay una entrada previa."));
         SwingUtilities.invokeAndWait(() -> {
             PunchPanel panel = ref.get();
             assertThat(component(panel, "employeeId", JTextField.class).getText()).isEqualTo("EMP-1");
@@ -99,7 +103,7 @@ class PunchPanelTest {
             assertThat(component(panel, "exit", JButton.class).isEnabled()).isTrue();
             assertThat(component(panel, "employeeId", JTextField.class).isEnabled()).isTrue();
         });
-        assertThat(tasks).isEmpty();
+        assertThat(calls.get()).isOne();
     }
 
     private static PunchPanel filledPanel() {

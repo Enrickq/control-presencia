@@ -18,12 +18,16 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 class HttpPunchGatewayTest {
     private static final PunchData PUNCH = new PunchData("EMP-1", "José \"Pepe\"", "CENTRO-1", "Oficina Ñ", PunchType.IN);
@@ -37,9 +41,11 @@ class HttpPunchGatewayTest {
     private final AtomicReference<String> requestBody = new AtomicReference<>();
     private final AtomicReference<String> requestMethod = new AtomicReference<>();
     private final AtomicReference<String> contentType = new AtomicReference<>();
+    private final CountDownLatch requestReceived = new CountDownLatch(1);
     private volatile int status = 201;
     private volatile String response = RECEIPT;
     private volatile long delayMillis;
+    private volatile CountDownLatch responseGate;
 
     @BeforeEach
     void startServer() throws IOException {
@@ -51,7 +57,11 @@ class HttpPunchGatewayTest {
             requestMethod.set(exchange.getRequestMethod());
             contentType.set(exchange.getRequestHeaders().getFirst("Content-Type"));
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            requestReceived.countDown();
             try {
+                CountDownLatch gate = responseGate;
+                if (gate != null && !gate.await(10, SECONDS))
+                    throw new IOException("The test did not release the response");
                 if (delayMillis > 0) Thread.sleep(delayMillis);
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -76,7 +86,7 @@ class HttpPunchGatewayTest {
     @Test
     void postsExactContractWithUnicodeAndReadsServerTimestamp() throws Exception {
         try (var gateway = new HttpPunchGateway(URI.create(base + "/"))) {
-            var receipt = gateway.register(PUNCH);
+            var receipt = gateway.register(PUNCH).get(5, SECONDS);
             assertThat(receipt.employeeId()).isEqualTo("EMP-1");
             assertThat(receipt.placeId()).isEqualTo("CENTRO-1");
             assertThat(receipt.type()).isEqualTo(PunchType.IN);
@@ -101,8 +111,7 @@ class HttpPunchGatewayTest {
         status = code;
         response = "<html>Error del servidor</html>";
         try (var gateway = new HttpPunchGateway(base)) {
-            assertThatThrownBy(() -> gateway.register(PUNCH)).isInstanceOfSatisfying(PunchException.class,
-                    error -> assertThat(error.kind()).isEqualTo(kind));
+            assertThat(awaitFailure(gateway.register(PUNCH)).kind()).isEqualTo(kind);
         }
         assertThat(requests.get()).isEqualTo(1);
     }
@@ -114,7 +123,7 @@ class HttpPunchGatewayTest {
         status = 409;
         response = new ObjectMapper().writeValueAsString(java.util.Map.of("error", "CONFLICT", "message", message));
         try (var gateway = new HttpPunchGateway(base)) {
-            assertThatThrownBy(() -> gateway.register(PUNCH)).isInstanceOf(PunchException.class).hasMessageContaining(explanation);
+            assertThat(awaitFailure(gateway.register(PUNCH))).hasMessageContaining(explanation);
         }
     }
 
@@ -126,10 +135,9 @@ class HttpPunchGatewayTest {
     void neverReportsSuccessForInvalidOrMismatchedReceipts(String body) {
         response = body;
         try (var gateway = new HttpPunchGateway(base)) {
-            assertThatThrownBy(() -> gateway.register(PUNCH)).isInstanceOfSatisfying(PunchException.class, error -> {
-                assertThat(error.kind()).isEqualTo(PunchException.Kind.INVALID_RESPONSE);
-                assertThat(error).hasMessageContaining("Consulta los registros antes de repetirlo");
-            });
+            var error = awaitFailure(gateway.register(PUNCH));
+            assertThat(error.kind()).isEqualTo(PunchException.Kind.INVALID_RESPONSE);
+            assertThat(error).hasMessageContaining("Consulta los registros antes de repetirlo");
         }
         assertThat(requests.get()).isEqualTo(1);
     }
@@ -138,10 +146,9 @@ class HttpPunchGatewayTest {
     void timesOutWithoutRetryAndWarnsOfUncertainOutcome() {
         delayMillis = 1000;
         try (var gateway = new HttpPunchGateway(base, Duration.ofMillis(100))) {
-            assertThatThrownBy(() -> gateway.register(PUNCH)).isInstanceOfSatisfying(PunchException.class, error -> {
-                assertThat(error.kind()).isEqualTo(PunchException.Kind.UNAVAILABLE);
-                assertThat(error).hasMessageContaining("Consulta los registros antes de repetirlo");
-            });
+            var error = awaitFailure(gateway.register(PUNCH));
+            assertThat(error.kind()).isEqualTo(PunchException.Kind.UNAVAILABLE);
+            assertThat(error).hasMessageContaining("Consulta los registros antes de repetirlo");
         }
         assertThat(requests.get()).isLessThanOrEqualTo(1);
     }
@@ -150,19 +157,30 @@ class HttpPunchGatewayTest {
     void explainsConnectionFailure() {
         server.stop(0);
         try (var gateway = new HttpPunchGateway(base)) {
-            assertThatThrownBy(() -> gateway.register(PUNCH)).isInstanceOfSatisfying(PunchException.class,
-                    error -> assertThat(error.kind()).isEqualTo(PunchException.Kind.UNAVAILABLE));
+            assertThat(awaitFailure(gateway.register(PUNCH)).kind()).isEqualTo(PunchException.Kind.UNAVAILABLE);
         }
     }
 
     @Test
-    void preservesInterruption() {
+    void returnsAPendingFutureBeforeTheServerRespondsAndSendsOnlyOnce() throws Exception {
+        responseGate = new CountDownLatch(1);
         try (var gateway = new HttpPunchGateway(base)) {
-            Thread.currentThread().interrupt();
-            assertThatThrownBy(() -> gateway.register(PUNCH)).isInstanceOf(PunchException.class);
-            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+            var invocation = workers.submit(() -> gateway.register(PUNCH));
+            try {
+                var result = invocation.get(5, SECONDS);
+                assertThat(requestReceived.await(5, SECONDS)).isTrue();
+                assertThat(result).isNotDone();
+
+                responseGate.countDown();
+
+                assertThat(result.get(5, SECONDS).type()).isEqualTo(PunchType.IN);
+                assertThat(requests.get()).isOne();
+            } finally {
+                responseGate.countDown();
+                invocation.cancel(true);
+            }
         } finally {
-            Thread.interrupted();
+            responseGate.countDown();
         }
     }
 
@@ -172,5 +190,12 @@ class HttpPunchGatewayTest {
     void rejectsInvalidBaseUrls(String url) {
         assertThatThrownBy(() -> new HttpPunchGateway(URI.create(url))).isInstanceOf(IllegalArgumentException.class);
         assertThat(requests.get()).isZero();
+    }
+
+    private static PunchException awaitFailure(CompletableFuture<?> future) {
+        Throwable failure = catchThrowable(() -> future.get(5, SECONDS));
+        assertThat(failure).isInstanceOf(ExecutionException.class);
+        assertThat(failure.getCause()).isInstanceOf(PunchException.class);
+        return (PunchException) failure.getCause();
     }
 }

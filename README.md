@@ -37,7 +37,7 @@ Actualmente se han implementado:
 
 **Sesión 11: primera aplicación frontend de registro.**
 
-La verificación de la sesión 11, del 15 de noviembre de 2026, superó **141 pruebas** sin fallos, errores ni pruebas omitidas: las 77 existentes y 64 del nuevo módulo. El resultado completo se recoge en la sección de compilación y pruebas.
+La revisión asíncrona del 18 de noviembre de 2026 superó **143 pruebas** sin fallos, errores ni pruebas omitidas. El resultado de la primera versión de la sesión 11 se conserva en la sección de compilación y pruebas.
 
 Todavía están pendientes las aplicaciones de consulta y administración, la integración completa del cálculo de asistencia con los datos administrativos persistidos y otras funcionalidades indicadas al final del documento.
 
@@ -151,12 +151,14 @@ De esta forma, la lógica de negocio no necesita conocer Javalin, Docker, Jackso
 | Componente | Responsabilidad |
 |---|---|
 | `PunchData`, `PunchType`, `PunchReceipt` | Datos del formulario y confirmación de la API |
-| `PunchGateway` | Puerto que permite registrar un fichaje |
-| `PunchController` | Validación de entrada, envío y estado de la operación |
-| `HttpPunchGateway` | Conversión JSON, llamada HTTP y tratamiento de errores |
+| `PunchGateway` | Puerto de registro que devuelve `CompletableFuture<PunchReceipt>` |
+| `PunchController` | Validación de entrada y coordinación de la operación asíncrona |
+| `HttpPunchGateway` | Conversión JSON, llamada con `HttpClient.sendAsync` y tratamiento de errores |
 | `PunchPanel` | Formulario Swing y presentación del resultado |
 
-El controlador depende del puerto remoto y de una vista, sin conocer Swing ni Javalin. Las peticiones se ejecutan fuera del hilo de eventos de Swing; la actualización de los componentes se realiza en ese hilo. Mientras hay una petición pendiente se bloquea un segundo envío. El servidor conserva la responsabilidad de validar la secuencia de entradas y salidas.
+El controlador depende del puerto remoto y de una vista, sin conocer Swing ni Javalin. El adaptador HTTP utiliza `HttpClient.sendAsync` y entrega el resultado como `CompletableFuture` a través del puerto. El controlador encadena la confirmación o el error sin esperar de forma bloqueante; el flujo de producción no utiliza `join()` ni `get()` para obtener el resultado de la petición.
+
+Esta revisión aplica el enfoque asíncrono trabajado en la semana 10: el futuro se mantiene desde la comunicación HTTP hasta el controlador. Las actualizaciones de Swing se programan en su hilo de eventos (EDT), sin ocuparlo mientras se espera al servidor. Durante una petición pendiente se bloquea un segundo envío y, al terminar, se recuperan los controles conservando los datos del formulario. No hay reenvíos automáticos ante un resultado incierto. El servidor conserva la responsabilidad de validar la secuencia de entradas y salidas.
 
 ### Puertos de entrada
 
@@ -863,7 +865,7 @@ Se realizaron las siguientes comprobaciones:
 
 Estas operaciones funcionaron con los datos utilizados en las comprobaciones manuales.
 
-En la sesión 11 el motor Docker no estaba disponible al comenzar la verificación. La construcción de la imagen y el recorrido con contenedores requieren comprobarse con el motor en ejecución; las pruebas de integración Java utilizan almacenamiento temporal independiente.
+El 16 de noviembre de 2026, después de que el usuario reconstruyera el backend, se comprobó que el contenedor estaba en ejecución, que `/api/v1/health` devolvía `status: UP` y que seguía montando el volumen `control-presencia_presence-data` en `/data`. Esto confirma el arranque y la continuidad del montaje, pero no certifica el recorrido manual completo de Swing. La revisión asíncrona del frontend no modifica la configuración Docker y no repite esa construcción; las pruebas de integración Java utilizan almacenamiento temporal independiente.
 
 ---
 
@@ -910,7 +912,13 @@ También puede utilizarse IntelliJ IDEA:
 4. Seleccionar el proyecto padre `control-presencia`.
 5. Ejecutar **Lifecycle → verify**.
 
-### Verificación de la sesión 11
+### Verificación de la revisión asíncrona
+
+El 18 de noviembre de 2026, `mvn -B -o clean verify` terminó con **BUILD SUCCESS** en JDK 27. Pasaron 143 pruebas: 30 de `domain`, 23 de `application`, 24 de `backend` y 66 de `frontend-register`.
+
+Una prueba retiene la respuesta HTTP para comprobar que el cliente devuelve un futuro pendiente y envía una sola petición. Las pruebas del controlador y de Swing comprueban la actualización de los controles al completar el futuro. La integración con Javalin verifica entradas, salidas, conflictos y persistencia tras reiniciar el servidor con datos temporales.
+
+### Resultado histórico de la sesión 11
 
 El 15 de noviembre de 2026 se ejecutó `mvn -B clean verify` con JDK 27 y se obtuvo **BUILD SUCCESS** en el proyecto padre y los cuatro módulos.
 
@@ -924,7 +932,7 @@ El 15 de noviembre de 2026 se ejecutó `mvn -B clean verify` con JDK 27 y se obt
 
 Las 64 pruebas del frontend comprueban validación de campos (10), configuración de arranque (3), controlador (6), presentación Swing y ejecución en su hilo de eventos (3), cliente HTTP (31) e integración con Javalin real (11). Incluyen entrada/salida, conflictos, persistencia tras reiniciar, Unicode, respuestas incorrectas, desconexión, tiempo de espera y prevención del doble envío.
 
-Se comprobó también el arranque del JAR con `--help`, su carpeta `lib/` con únicamente las tres bibliotecas Jackson necesarias y el diseño del formulario mediante renderizado sin ventana. La configuración Compose pasó `docker compose config --quiet`. Esto no sustituye la prueba manual del escritorio ni la construcción de la imagen Docker, que no se ejecutó porque el motor estaba detenido.
+Se comprobó también el arranque del JAR con `--help`, su carpeta `lib/` con únicamente las tres bibliotecas Jackson necesarias y el diseño del formulario mediante renderizado sin ventana. La configuración Compose pasó `docker compose config --quiet`. El día 15 no se construyó la imagen porque el motor estaba detenido; el arranque y el montaje persistente se comprobaron el día 16, después de la reconstrucción realizada por el usuario, como se detalla en la sección Docker. El recorrido manual completo del escritorio no queda certificado por estas comprobaciones.
 
 Se corrigió una línea vacía anterior a la declaración XML del POM raíz que impedía leer el proyecto con Maven. La API ahora rechaza identificadores con caracteres de control antes de guardarlos en el archivo de fichajes.
 
@@ -1002,9 +1010,9 @@ Los hitos estables pueden identificarse mediante etiquetas de versión.
 
 Antes de integrar cambios se comprueba la construcción y se ejecutan las pruebas disponibles.
 
-### Integrar la sesión 11 en `develop`
+### Integrar la revisión asíncrona en `develop`
 
-En la carpeta original del repositorio, comprobar primero que la rama activa es `develop` y revisar los cambios de esta sesión:
+La primera versión del frontend de la sesión 11 ya forma parte del historial. Esta revisión se registra mediante un commit nuevo, sin repetir ni modificar aquel commit. En la carpeta original del repositorio, comprobar que la rama activa es `develop` y revisar los cambios actuales:
 
 ```bash
 git branch --show-current
@@ -1014,14 +1022,17 @@ git diff --stat
 mvn clean verify
 ```
 
-Si hay trabajo ajeno a esta sesión, conservarlo y revisar qué se incluye antes de preparar el commit. Para incorporar los archivos de la sesión 11:
+Si hay trabajo ajeno a esta revisión, conservarlo y revisar qué se incluye antes de preparar el commit. Seleccionar los cambios del cliente asíncrono, sus pruebas y la documentación:
 
 ```bash
-git add pom.xml frontend-register Dockerfile README.md backend/src/main/java/software/ulpgc/register/infrastructure/adapter/in/http/ApiServer.java
+git add -p -- frontend-register README.md
+git diff --cached
 git diff --cached --stat
 git diff --cached --check
-git commit -m "feat: add Swing punch registration frontend"
+git commit -m "refactor: make punch registration asynchronous"
 ```
+
+`git add -p` permite seleccionar los cambios de archivos ya versionados. Si `git status` muestra pruebas u otros archivos nuevos de esta revisión, añadirlos también por su ruta concreta antes del commit.
 
 Antes de publicar, actualizar las referencias y comprobar si hay commits remotos nuevos:
 
@@ -1081,7 +1092,7 @@ La aplicación de registro de entradas y salidas está implementada en `frontend
 
 - Ampliar las pruebas HTTP a todos los endpoints administrativos.
 - Pruebas de integración de las aplicaciones de consulta y administración.
-- Verificar la imagen Docker actualizada con el motor de contenedores en ejecución.
+- Completar y documentar el recorrido manual de Swing conectado al backend.
 - Integración completa de todos los componentes.
 - Evaluación de un mecanismo de mensajería si aporta valor a la arquitectura.
 - Documentación y capturas de las tres aplicaciones terminadas.

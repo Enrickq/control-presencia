@@ -9,8 +9,6 @@ import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.net.URI;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public final class FrontendMain {
     private FrontendMain() { }
@@ -45,10 +43,8 @@ public final class FrontendMain {
     }
 
     private static void open(HttpPunchGateway gateway) {
-        ExecutorService worker = Executors.newSingleThreadExecutor(
-                Thread.ofPlatform().name("registro-http").daemon(true).factory());
         PunchPanel panel = new PunchPanel();
-        PunchController controller = new PunchController(gateway, panel, worker, SwingUtilities::invokeLater);
+        PunchController controller = new PunchController(gateway, panel, SwingUtilities::invokeLater);
         panel.bind(controller);
 
         JFrame frame = new JFrame("Control de Presencia · Registro");
@@ -62,8 +58,7 @@ public final class FrontendMain {
                     return;
                 }
                 frame.dispose();
-                worker.shutdown();
-                Thread.startVirtualThread(gateway::close);
+                gateway.close();
             }
         });
         frame.pack();

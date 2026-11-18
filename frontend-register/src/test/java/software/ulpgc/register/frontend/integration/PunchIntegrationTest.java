@@ -41,8 +41,10 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.stream.Stream;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -72,7 +74,7 @@ class PunchIntegrationTest {
     void shouldKeepEntryAndExitAndContinueTheSequenceAcrossServerRestarts() throws Exception {
         PunchReceipt entry;
         try (var gateway = new HttpPunchGateway(baseUri())) {
-            entry = gateway.register(punch(PunchType.IN));
+            entry = gateway.register(punch(PunchType.IN)).get(5, SECONDS);
         }
         assertThat(entry.employeeId()).isEqualTo(EMPLOYEE_ID);
         assertThat(entry.placeId()).isEqualTo("CENTRO-01");
@@ -82,7 +84,7 @@ class PunchIntegrationTest {
 
         PunchReceipt exit;
         try (var gateway = new HttpPunchGateway(baseUri())) {
-            exit = gateway.register(punch(PunchType.OUT));
+            exit = gateway.register(punch(PunchType.OUT)).get(5, SECONDS);
         }
         assertThat(exit.type()).isEqualTo(PunchType.OUT);
         assertThat(exit.timestamp()).isAfter(entry.timestamp());
@@ -107,8 +109,11 @@ class PunchIntegrationTest {
     @Test
     void shouldReportDuplicateEntryWithoutWritingAnotherEvent() throws Exception {
         try (var gateway = new HttpPunchGateway(baseUri())) {
-            var entry = gateway.register(punch(PunchType.IN));
-            assertThatThrownBy(() -> gateway.register(punch(PunchType.IN)))
+            var entry = gateway.register(punch(PunchType.IN)).get(5, SECONDS);
+            var duplicate = gateway.register(punch(PunchType.IN));
+            assertThatThrownBy(() -> duplicate.get(5, SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
                     .isInstanceOfSatisfying(PunchException.class,
                             failure -> assertThat(failure.kind()).isEqualTo(PunchException.Kind.CONFLICT));
             assertThat(query(LocalDate.ofInstant(entry.timestamp(), ZoneOffset.UTC))).hasSize(1);
@@ -118,7 +123,10 @@ class PunchIntegrationTest {
     @Test
     void shouldReportExitWithoutEntryWithoutCreatingEventFiles() throws Exception {
         try (var gateway = new HttpPunchGateway(baseUri())) {
-            assertThatThrownBy(() -> gateway.register(punch(PunchType.OUT)))
+            var orphanExit = gateway.register(punch(PunchType.OUT));
+            assertThatThrownBy(() -> orphanExit.get(5, SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause()
                     .isInstanceOfSatisfying(PunchException.class,
                             failure -> assertThat(failure.kind()).isEqualTo(PunchException.Kind.CONFLICT));
         }
@@ -137,7 +145,7 @@ class PunchIntegrationTest {
                 .POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body)))
                 .build();
 
-        var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        var response = http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).get(5, SECONDS);
 
         assertThat(response.statusCode()).isEqualTo(400);
         assertThat(JSON.readTree(response.body()).path("message").asText())
@@ -162,7 +170,7 @@ class PunchIntegrationTest {
         var request = HttpRequest.newBuilder(baseUri().resolve(
                         "/api/v1/punches?employeeId=" + encodedId + "&date=" + date))
                 .timeout(Duration.ofSeconds(5)).GET().build();
-        var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        var response = http.sendAsync(request, HttpResponse.BodyHandlers.ofString()).get(5, SECONDS);
         assertThat(response.statusCode()).isEqualTo(200);
         var records = new ArrayList<JsonNode>();
         JSON.readTree(response.body()).forEach(records::add);
