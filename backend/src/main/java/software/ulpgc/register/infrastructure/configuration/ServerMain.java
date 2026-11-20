@@ -44,6 +44,10 @@ public final class ServerMain {
                 )
         );
 
+        createServer(dataDirectory).start("0.0.0.0", port);
+    }
+
+    public static Javalin createServer(Path dataDirectory) {
         FileEventStore events =
                 new FileEventStore(dataDirectory.toFile());
 
@@ -90,14 +94,12 @@ public final class ServerMain {
                         )
                 );
 
-        Javalin server = ApiServer.create(
+        return ApiServer.create(
                 new RegisterTrackingEvent(events),
                 new ListTrackingEvents(events),
                 administration,
                 attendance
         );
 
-
-        server.start("0.0.0.0", port);
     }
 }

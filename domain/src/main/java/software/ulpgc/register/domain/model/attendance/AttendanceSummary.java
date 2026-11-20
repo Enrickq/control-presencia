@@ -1,6 +1,8 @@
 package software.ulpgc.register.domain.model.attendance;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 public record AttendanceSummary(
@@ -29,6 +31,18 @@ public record AttendanceSummary(
                     "Attendance minutes cannot be negative"
             );
         }
+    }
+
+    public List<AttendanceIncident> incidents() {
+        List<AttendanceIncident> incidents = new ArrayList<>();
+        switch (status) {
+            case ABSENT -> incidents.add(AttendanceIncident.ABSENCE);
+            case INCOMPLETE -> incidents.add(AttendanceIncident.INCOMPLETE_PUNCHES);
+            case UNSCHEDULED -> incidents.add(AttendanceIncident.UNSCHEDULED_WORK);
+            case PRESENT, OFF -> { }
+        }
+        if (lateMinutes > 0) incidents.add(AttendanceIncident.LATE_ARRIVAL);
+        return List.copyOf(incidents);
     }
 
     public long balanceMinutes() {

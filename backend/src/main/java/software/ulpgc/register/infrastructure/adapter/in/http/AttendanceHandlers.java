@@ -4,7 +4,10 @@ import io.javalin.http.Context;
 import software.ulpgc.register.application.port.in.AttendanceReportQuery;
 import software.ulpgc.register.domain.model.attendance.AttendanceSummary;
 
+import software.ulpgc.register.domain.model.attendance.AttendanceIncident;
+
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 
 public record AttendanceHandlers(
@@ -38,7 +41,8 @@ public record AttendanceHandlers(
                 summary.workedMinutes(),
                 summary.lateMinutes(),
                 summary.balanceMinutes(),
-                summary.status().name()
+                summary.status().name(),
+                summary.incidents()
         ));
     }
 
@@ -62,7 +66,8 @@ public record AttendanceHandlers(
             long workedMinutes,
             long lateMinutes,
             long balanceMinutes,
-            String status
+            String status,
+            List<AttendanceIncident> incidents
     ) {
     }
 }
