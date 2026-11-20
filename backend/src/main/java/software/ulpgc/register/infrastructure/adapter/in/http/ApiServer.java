@@ -17,6 +17,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class ApiServer {
 
@@ -28,9 +29,38 @@ public final class ApiServer {
             TrackingEventsQuery query,
             AdministrationHandlers administration
     ) {
+        return create(
+                register,
+                query,
+                administration,
+                Optional.empty()
+        );
+    }
+
+    public static Javalin create(
+            RegisterPunchCommand register,
+            TrackingEventsQuery query,
+            AdministrationHandlers administration,
+            AttendanceHandlers attendance
+    ) {
+        return create(
+                register,
+                query,
+                administration,
+                Optional.of(Objects.requireNonNull(attendance))
+        );
+    }
+
+    private static Javalin create(
+            RegisterPunchCommand register,
+            TrackingEventsQuery query,
+            AdministrationHandlers administration,
+            Optional<AttendanceHandlers> attendance
+    ) {
         Objects.requireNonNull(register);
         Objects.requireNonNull(query);
         Objects.requireNonNull(administration);
+        Objects.requireNonNull(attendance);
 
         return Javalin.create(config -> {
 
@@ -143,6 +173,13 @@ public final class ApiServer {
                                 "message", error.getMessage()
                         ));
                     }
+            );
+
+            attendance.ifPresent(handler ->
+                    config.routes.get(
+                            "/api/v1/attendance",
+                            handler::getDaily
+                    )
             );
 
             config.routes.exception(

@@ -18,6 +18,12 @@ import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventS
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileScheduleAssignmentRepository;
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileScheduleRepository;
 
+import software.ulpgc.register.application.usecase.CalculateDailyAttendance;
+import software.ulpgc.register.application.usecase.GetDailyAttendance;
+import software.ulpgc.register.application.usecase.ResolveDailySchedule;
+import software.ulpgc.register.infrastructure.adapter.in.http.AttendanceHandlers;
+
+
 import java.nio.file.Path;
 
 public final class ServerMain {
@@ -72,11 +78,25 @@ public final class ServerMain {
                         )
                 );
 
+        AttendanceHandlers attendance =
+                new AttendanceHandlers(
+                        new GetDailyAttendance(
+                                employees,
+                                new ResolveDailySchedule(
+                                        assignments,
+                                        schedules
+                                ),
+                                new CalculateDailyAttendance(events)
+                        )
+                );
+
         Javalin server = ApiServer.create(
                 new RegisterTrackingEvent(events),
                 new ListTrackingEvents(events),
-                administration
+                administration,
+                attendance
         );
+
 
         server.start("0.0.0.0", port);
     }
