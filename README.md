@@ -32,14 +32,16 @@ Actualmente se han implementado:
 - Persistencia administrativa mediante archivos JSONL.
 - Ejecución del backend con Docker Compose.
 - Conservación de datos después de recrear el contenedor.
-- Aplicación de escritorio Swing para registrar entradas y salidas mediante la API HTTP.
+- Dos aplicaciones Swing independientes para registrar fichajes y consultar la asistencia por empleado y fecha.
 - Pruebas automatizadas con JUnit 5 y AssertJ.
 
-**Sesión 11: primera aplicación frontend de registro.**
+**Sesión 12 · Consulta diaria e incidencias.**
+
+La consulta recupera el horario asignado y muestra los indicadores calculados por el servidor junto con los fichajes del día UTC. Los dos escritorios se pueden abrir al mismo tiempo. La guía de ejecución y el ejemplo HTTP están en la sección de consulta.
 
 La revisión asíncrona del 18 de noviembre de 2026 superó **143 pruebas** sin fallos, errores ni pruebas omitidas. El resultado de la primera versión de la sesión 11 se conserva en la sección de compilación y pruebas.
 
-Todavía están pendientes las aplicaciones de consulta y administración, la integración completa del cálculo de asistencia con los datos administrativos persistidos y otras funcionalidades indicadas al final del documento.
+La próxima sesión se centra en la aplicación de administración, que reutilizará los puertos de empleados, horarios y asignaciones.
 
 ---
 
@@ -58,16 +60,19 @@ El diseño aplica especialmente los siguientes principios:
 
 ### Organización Maven multimódulo
 
-El proyecto contiene cuatro módulos:
+El proyecto contiene cinco módulos.
 
 | Módulo | Responsabilidad |
 |---|---|
 | `domain` | Modelos, contratos del dominio y reglas de negocio |
 | `application` | Casos de uso y puertos de entrada y salida |
 | `backend` | Adaptadores HTTP, persistencia y configuración de ejecución |
-| `frontend-register` | Aplicación Swing de fichajes, controlador y cliente HTTP |
+| `frontend-register` | Aplicación Swing de registro de fichajes |
+| `frontend-query` | Aplicación Swing de consulta diaria y adaptador HTTP de lectura |
 
-La estructura principal es:
+Los módulos organizan el código en `src/main/java` y las pruebas en `src/test/java`. En `frontend-query`, el paquete `software.ulpgc.register.query` contiene `QueryMain`, `model`, `application`, `port`, `adapter/http` y `adapter/swing`.
+
+Estructura del núcleo y del escritorio de registro:
 
 ```text
 control-presencia/
@@ -129,7 +134,7 @@ control-presencia/
               application
                    ▲
                    │
-                backend  ◄── HTTP/JSON ── frontend-register
+                backend  ◄── HTTP/JSON ── frontend-register, frontend-query
 ```
 
 El módulo `backend` también puede depender directamente de `domain` cuando necesita construir o adaptar sus modelos.
@@ -139,7 +144,7 @@ Las dependencias cumplen estas reglas:
 - `domain` no depende de `application` ni de `backend`.
 - `application` depende del dominio, pero no de la infraestructura.
 - `backend` depende de los contratos y modelos necesarios para implementar sus adaptadores.
-- `frontend-register` no depende de los módulos del servidor en producción. Utiliza tipos propios para el contrato HTTP, `java.net.http.HttpClient` y Jackson.
+- Los dos escritorios utilizan tipos propios, `java.net.http.HttpClient` y Jackson. Cada aplicación se comunica directamente con el servidor y tiene su propio punto de entrada.
 - Las pruebas de integración del frontend dependen de `backend` con alcance Maven `test`, para probar el cliente contra Javalin y repositorios temporales reales.
 
 De esta forma, la lógica de negocio no necesita conocer Javalin, Docker, Jackson ni los detalles de los archivos.
@@ -170,7 +175,8 @@ Entre los contratos implementados se encuentran:
 |---|---|
 | `RegisterPunchCommand` | Registrar fichajes |
 | `TrackingEventsQuery` | Consultar fichajes almacenados |
-| `DailyAttendanceQuery` | Consultar un resumen diario de asistencia |
+| `DailyAttendanceQuery` | Calcular un resumen diario con el horario y la asignación recibidos |
+| `AttendanceReportQuery` | Consultar asistencia por empleado y fecha resolviendo su asignación vigente |
 | `RegisterEmployeeCommand` | Registrar empleados |
 | `RegisterScheduleCommand` | Registrar horarios |
 | `AssignScheduleCommand` | Asignar horarios |
@@ -197,7 +203,7 @@ Los principales casos de uso implementados son:
 
 - `RegisterTrackingEvent`: valida y registra entradas y salidas.
 - `ListTrackingEvents`: consulta eventos registrados.
-- `CalculateDailyAttendance`: calcula indicadores diarios de asistencia.
+- `CalculateDailyAttendance` calcula los indicadores diarios. `GetDailyAttendance` valida el empleado y utiliza `ResolveDailySchedule` para recuperar la asignación vigente antes de invocar el cálculo.
 - `RegisterEmployee`: registra empleados y rechaza identificadores duplicados.
 - `RegisterSchedule`: registra definiciones de horarios.
 - `AssignScheduleToEmployee`: comprueba referencias y periodos antes de guardar una asignación.
@@ -445,7 +451,7 @@ El cálculo comprueba la coherencia de la asignación con el empleado, el horari
 
 Los resultados de jornadas incompletas no deben considerarse definitivos.
 
-Todavía están pendientes la integración automática con los repositorios administrativos, la exposición del cálculo mediante HTTP y el tratamiento completo de festivos, permisos, incidencias y zonas horarias propias de cada centro.
+`GetDailyAttendance` consulta los repositorios administrativos. El adaptador HTTP expone el resultado y las incidencias automáticas. Quedan pendientes los festivos, los permisos y las zonas horarias de cada centro.
 
 ---
 
@@ -467,7 +473,8 @@ Las operaciones se comunican mediante HTTP y JSON.
 |---|---|---|
 | GET | `/api/v1/health` | Comprueba el estado del servidor |
 | POST | `/api/v1/punches` | Registra una entrada o salida |
-| GET | `/api/v1/punches` | Consulta fichajes por empleado y fecha |
+| GET | `/api/v1/punches` | Consulta fichajes por empleado y fecha UTC |
+| GET | `/api/v1/attendance` | Devuelve los indicadores y las incidencias del empleado para esa fecha |
 
 ### Registrar una entrada
 
@@ -695,6 +702,61 @@ La auditoría administrativa completa, incluyendo actor, operación y marca temp
 
 ---
 
+## Aplicación de consulta diaria
+
+Se necesita JDK 27, Maven y un escritorio gráfico. Desde la raíz del repositorio, compila el proyecto y arranca el backend. Compose conserva el volumen de datos al reconstruir la imagen.
+
+```bash
+mvn clean verify
+docker compose up -d --build
+java -jar frontend-query/target/control-presencia-frontend-query-0.1.0-SNAPSHOT.jar
+```
+
+El JAR de consulta incluye sus dependencias Jackson. Utiliza `--help` para ver las opciones. La URL indicada como argumento tiene prioridad sobre `API_BASE_URL`. El valor predeterminado es `http://localhost:7070`. El escritorio de registro tiene su propio JAR y su carpeta `lib/`.
+
+Introduce el identificador de empleado y la fecha UTC (`AAAA-MM-DD`). Pulsa **Consultar**. Los indicadores y las incidencias proceden de `GET /api/v1/attendance`, donde el servidor resuelve la asignación vigente y ejecuta `CalculateDailyAttendance`. La tabla procede de `GET /api/v1/punches` y muestra hora UTC, entrada o salida y lugar. En una jornada nocturna, el resumen del día de entrada puede incluir una salida de la madrugada siguiente. Esa salida aparece en la tabla de su propia fecha UTC.
+
+### Contrato observado en Javalin
+
+Para una jornada de 08:00 a 16:00 con entrada a las 08:10 y salida a las 15:55, la respuesta a `GET /api/v1/attendance?employeeId=DEMO-S12&date=2026-11-20` fue HTTP 200.
+
+```json
+{"employeeId":"DEMO-S12","date":"2026-11-20","expectedMinutes":480,"workedMinutes":465,"lateMinutes":10,"balanceMinutes":-15,"status":"PRESENT","incidents":["LATE_ARRIVAL"]}
+```
+
+Con los mismos parámetros, `GET /api/v1/punches` devolvió ambos fichajes.
+
+```json
+[
+  {"employeeId":"DEMO-S12","placeId":"SALA","type":"IN","timestamp":"2026-11-20T08:10:00Z"},
+  {"employeeId":"DEMO-S12","placeId":"SALA","type":"OUT","timestamp":"2026-11-20T15:55:00Z"}
+]
+```
+
+| Respuesta de asistencia | Qué muestra la aplicación |
+|---|---|
+| `incidents: []` | Sin incidencias |
+| `LATE_ARRIVAL`, `ABSENCE`, `INCOMPLETE_PUNCHES`, `UNSCHEDULED_WORK` | Retraso, ausencia, secuencia incompleta o trabajo en día libre |
+| Resumen de una versión anterior sin el campo `incidents` | Indicadores disponibles y aviso de que el servidor no detalla incidencias |
+| HTTP 400 por empleado desconocido o falta de asignación | Motivo en español. Los fichajes siguen disponibles si su consulta termina correctamente |
+| Fecha inexistente o formato incorrecto | Validación en el formulario. Si se llama directamente a la API, esta devuelve HTTP 400 con `INVALID_DATE` |
+| Error de conexión, respuesta incompatible o servidor no disponible | Mensaje en la sección afectada. Los resultados anteriores se borran al iniciar una consulta |
+
+### Responsabilidades y asincronía
+
+`QueryMain` compone el adaptador `HttpAttendanceGateway`, el controlador `QueryController` y la vista `QueryPanel`. El controlador depende del puerto `AttendanceGateway`. Cada petición se envía con `HttpClient.sendAsync` y devuelve un `CompletableFuture`. Las dos respuestas se presentan de forma independiente en el hilo de eventos de Swing. El formulario se habilita cuando ambas terminan. La aplicación no modifica fichajes ni datos administrativos.
+
+### Comprobación reproducible
+
+`AttendanceHttpIntegrationTest` crea un directorio temporal, da de alta por HTTP un empleado ficticio, un horario y una asignación, y verifica el ejemplo anterior con los adaptadores reales de persistencia y HTTP. También cubre jornada incompleta, ausencia, trabajo nocturno y consultas sin asignación. `QueryLoopbackTest` comprueba el transporte de producción en un puerto TCP efímero. Las pruebas del controlador completan futuros en distinto orden y comprueban que el hilo de Swing permanece disponible.
+
+```bash
+mvn -pl frontend-query -am clean verify
+java -jar frontend-query/target/control-presencia-frontend-query-0.1.0-SNAPSHOT.jar --help
+```
+
+Para repetir la comprobación desde el escritorio, usa un empleado de prueba existente con asignación vigente. Compara los resultados con las dos rutas HTTP para esa fecha. Cambia después a una fecha fuera de la asignación para comprobar el mensaje y la tabla de fichajes. Los datos de ejemplo de las pruebas se crean en directorios temporales.
+
 ## Ejecutar la aplicación de registro
 
 Se necesitan JDK 27 y un entorno gráfico de escritorio. El frontend puede ejecutarse en el equipo y conectarse tanto al backend local como al backend de Docker.
@@ -768,7 +830,7 @@ El formulario envía `employeeId`, `employeeName`, `placeId`, `placeName` y `typ
 
 Los campos vacíos y los caracteres de control se rechazan antes del envío. La API también protege los identificadores frente a caracteres de control para evitar alterar el formato de los archivos. Los conflictos de secuencia y los errores de conexión se muestran en la interfaz; los datos del formulario se conservan. El cliente no reenvía automáticamente un fichaje: tras un error de red o una respuesta no válida puede desconocerse si el servidor llegó a guardarlo. Antes de volver a fichar, consultar los registros mediante `GET /api/v1/punches`.
 
-Esta pantalla identifica al empleado mediante datos introducidos manualmente. **No proporciona autenticación ni comprueba que exista en el catálogo administrativo.** Tampoco muestra un historial ni calcula asistencia; esas funciones corresponden a las siguientes aplicaciones.
+Esta pantalla identifica al empleado mediante datos introducidos manualmente. **No proporciona autenticación ni comprueba que exista en el catálogo administrativo.** El historial diario y el resumen de asistencia se consultan en `frontend-query`.
 
 ### Recorrido manual reproducible
 
@@ -890,6 +952,10 @@ El 16 de noviembre de 2026, después de que el usuario reconstruyera el backend,
 
 ## Compilación y pruebas
 
+### Verificación de la sesión 12
+
+En la ejecución completa con JDK 27 del 20 de noviembre de 2026 se contabilizaron 195 pruebas. Pasaron 152. Las 43 restantes encontraron un error de apertura o conexión de sockets locales en el entorno de ejecución. El resultado global fue `BUILD FAILURE`. En el módulo de consulta pasaron 38 de 39 pruebas, incluidas las cuatro integraciones por HTTP en memoria. La prueba restante utiliza TCP real. Los detalles por módulo figuran en los informes de Surefire generados por Maven. Para cerrar la sesión hay que repetir `mvn clean verify` con acceso TCP local y comprobar el escritorio con el despliegue.
+
 ### Requisitos para ejecutar Maven
 
 - JDK 27.
@@ -902,7 +968,7 @@ Desde la raíz del proyecto:
 mvn clean verify
 ```
 
-El proyecto padre construye los cuatro módulos en el orden establecido por las dependencias.
+El proyecto padre construye los cinco módulos en el orden establecido por las dependencias.
 
 También puede utilizarse IntelliJ IDEA:
 
@@ -991,7 +1057,7 @@ Entre los escenarios comprobados se encuentran:
 - Rechazo de periodos solapados.
 - Recuperación de registros después de recrear el contenedor Docker.
 
-La sesión 11 añade pruebas HTTP automatizadas de fichajes. Las pruebas HTTP completas de administración y de las futuras aplicaciones siguen pendientes.
+La sesión 12 incorpora integración HTTP de asistencia y fichajes con repositorios temporales. La cobertura completa de los flujos administrativos corresponde a la siguiente aplicación.
 
 ---
 
@@ -1010,64 +1076,18 @@ Los hitos estables pueden identificarse mediante etiquetas de versión.
 
 Antes de integrar cambios se comprueba la construcción y se ejecutan las pruebas disponibles.
 
-### Integrar la revisión asíncrona en `develop`
-
-La primera versión del frontend de la sesión 11 ya forma parte del historial. Esta revisión se registra mediante un commit nuevo, sin repetir ni modificar aquel commit. En la carpeta original del repositorio, comprobar que la rama activa es `develop` y revisar los cambios actuales:
-
-```bash
-git branch --show-current
-git status -sb
-git diff --check
-git diff --stat
-mvn clean verify
-```
-
-Si hay trabajo ajeno a esta revisión, conservarlo y revisar qué se incluye antes de preparar el commit. Seleccionar los cambios del cliente asíncrono, sus pruebas y la documentación:
-
-```bash
-git add -p -- frontend-register README.md
-git diff --cached
-git diff --cached --stat
-git diff --cached --check
-git commit -m "refactor: make punch registration asynchronous"
-```
-
-`git add -p` permite seleccionar los cambios de archivos ya versionados. Si `git status` muestra pruebas u otros archivos nuevos de esta revisión, añadirlos también por su ruta concreta antes del commit.
-
-Antes de publicar, actualizar las referencias y comprobar si hay commits remotos nuevos:
-
-```bash
-git fetch origin
-git log --oneline --left-right develop...origin/develop
-```
-
-Si aparecen commits exclusivos de `origin/develop`, integrarlos y repetir la verificación antes de publicar. Cuando `develop` contenga los cambios remotos y las pruebas hayan pasado:
-
-```bash
-git push origin develop
-```
-
-Estos comandos no integran cambios en `main`. No se necesita eliminar contenedores ni volúmenes para registrar los cambios en Git.
-
----
-
 ## Limitaciones actuales y trabajo pendiente
 
 El proyecto continúa en desarrollo y no constituye todavía una solución de producción.
 
 ### Aplicaciones de usuario
 
-La aplicación de registro de entradas y salidas está implementada en `frontend-register`. Quedan pendientes:
-
-- Aplicación para consultar asistencia e incidencias.
-- Aplicación para administrar horarios, asignaciones y guardias.
+Los escritorios de registro y consulta están implementados. Queda la aplicación para administrar empleados, horarios y asignaciones, y concretar el alcance de las guardias.
 
 ### Integración funcional
 
 - Validar los fichajes contra el catálogo persistente de empleados.
-- Integrar automáticamente los horarios y asignaciones almacenados en el cálculo de asistencia.
-- Exponer los resultados de asistencia calculada mediante HTTP.
-- Completar la consulta y gestión de incidencias.
+- Definir la gestión de incidencias que requieran revisión o justificación manual.
 - Incorporar una gestión completa de guardias y sus activaciones.
 - Incorporar rotaciones automáticas de varias semanas.
 
@@ -1091,7 +1111,7 @@ La aplicación de registro de entradas y salidas está implementada en `frontend
 ### Verificación y despliegue
 
 - Ampliar las pruebas HTTP a todos los endpoints administrativos.
-- Pruebas de integración de las aplicaciones de consulta y administración.
+- Pruebas de integración de la futura aplicación de administración.
 - Completar y documentar el recorrido manual de Swing conectado al backend.
 - Integración completa de todos los componentes.
 - Evaluación de un mecanismo de mensajería si aporta valor a la arquitectura.
@@ -1103,8 +1123,6 @@ El desarrollo continuará priorizando las funcionalidades exigidas, la simplicid
 
 ## Objetivo de las siguientes iteraciones
 
-El siguiente hito es conectar la validación de fichajes con el catálogo persistente de empleados y desarrollar la aplicación de consulta de asistencia.
-
-A continuación se incorporará la aplicación de administración de horarios y asignaciones.
+La sesión 13 prevé administrar empleados, horarios y asignaciones desde un tercer escritorio. El recorrido de aceptación será dar de alta un empleado de prueba, asignarle un horario, fichar y consultar la jornada en los dos escritorios existentes. Se revisará cómo validar nuevos fichajes frente al catálogo conservando la lectura de los datos anteriores.
 
 Una vez desarrolladas estas interfaces, se completarán las integraciones funcionales, las pruebas y la documentación de entrega.
