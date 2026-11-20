@@ -15,6 +15,7 @@
         <module>application</module>
         <module>backend</module>
         <module>frontend-register</module>
+        <module>frontend-query</module>
     </modules>
 
     <properties>
