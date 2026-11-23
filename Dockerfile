@@ -9,6 +9,7 @@ COPY application/pom.xml application/pom.xml
 COPY backend/pom.xml backend/pom.xml
 COPY frontend-register/pom.xml frontend-register/pom.xml
 COPY frontend-query/pom.xml frontend-query/pom.xml
+COPY frontend-admin/pom.xml frontend-admin/pom.xml
 
 COPY domain/src domain/src
 COPY application/src application/src
