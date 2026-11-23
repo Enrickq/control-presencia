@@ -32,7 +32,7 @@ Actualmente se han implementado:
 - Persistencia administrativa mediante archivos JSONL.
 - Ejecución del backend con Docker Compose.
 - Conservación de datos después de recrear el contenedor.
-- Dos aplicaciones Swing independientes para registrar fichajes y consultar la asistencia por empleado y fecha.
+- Tres aplicaciones Swing independientes para administrar empleados y horarios, registrar fichajes y consultar la asistencia por empleado y fecha.
 - Pruebas automatizadas con JUnit 5 y AssertJ.
 
 **Sesión 12 · Consulta diaria e incidencias.**
@@ -41,7 +41,7 @@ La consulta recupera el horario asignado y muestra los indicadores calculados po
 
 La revisión asíncrona del 18 de noviembre de 2026 superó **143 pruebas** sin fallos, errores ni pruebas omitidas. El resultado de la primera versión de la sesión 11 se conserva en la sección de compilación y pruebas.
 
-La próxima sesión se centra en la aplicación de administración, que reutilizará los puertos de empleados, horarios y asignaciones.
+**Sesión 13 — Administración.** El módulo `frontend-admin` permite crear empleados y horarios y asignar un horario durante un período. Los tres escritorios utilizan la misma API y los mismos datos del backend.
 
 ---
 
@@ -60,7 +60,7 @@ El diseño aplica especialmente los siguientes principios:
 
 ### Organización Maven multimódulo
 
-El proyecto contiene cinco módulos.
+El proyecto contiene seis módulos.
 
 | Módulo | Responsabilidad |
 |---|---|
@@ -69,6 +69,7 @@ El proyecto contiene cinco módulos.
 | `backend` | Adaptadores HTTP, persistencia y configuración de ejecución |
 | `frontend-register` | Aplicación Swing de registro de fichajes |
 | `frontend-query` | Aplicación Swing de consulta diaria y adaptador HTTP de lectura |
+| `frontend-admin` | Aplicación Swing de altas de empleados, horarios y asignaciones |
 
 Los módulos organizan el código en `src/main/java` y las pruebas en `src/test/java`. En `frontend-query`, el paquete `software.ulpgc.register.query` contiene `QueryMain`, `model`, `application`, `port`, `adapter/http` y `adapter/swing`.
 
@@ -134,7 +135,7 @@ control-presencia/
               application
                    ▲
                    │
-                backend  ◄── HTTP/JSON ── frontend-register, frontend-query
+                backend  ◄── HTTP/JSON ── frontend-register, frontend-query, frontend-admin
 ```
 
 El módulo `backend` también puede depender directamente de `domain` cuando necesita construir o adaptar sus modelos.
@@ -144,7 +145,7 @@ Las dependencias cumplen estas reglas:
 - `domain` no depende de `application` ni de `backend`.
 - `application` depende del dominio, pero no de la infraestructura.
 - `backend` depende de los contratos y modelos necesarios para implementar sus adaptadores.
-- Los dos escritorios utilizan tipos propios, `java.net.http.HttpClient` y Jackson. Cada aplicación se comunica directamente con el servidor y tiene su propio punto de entrada.
+- Los tres escritorios utilizan tipos propios, `java.net.http.HttpClient` y Jackson. Cada aplicación se comunica directamente con el servidor y tiene su propio punto de entrada.
 - Las pruebas de integración del frontend dependen de `backend` con alcance Maven `test`, para probar el cliente contra Javalin y repositorios temporales reales.
 
 De esta forma, la lógica de negocio no necesita conocer Javalin, Docker, Jackson ni los detalles de los archivos.
@@ -702,6 +703,21 @@ La auditoría administrativa completa, incluyendo actor, operación y marca temp
 
 ---
 
+## Aplicación de administración
+
+Con JDK 27, desde la raíz del proyecto, ejecuta `mvn clean verify`. Arranca el backend con `docker compose up -d --build` y abre el escritorio desde otra terminal.
+
+```powershell
+java -jar frontend-admin/target/control-presencia-frontend-admin-0.1.0-SNAPSHOT.jar http://localhost:7070
+```
+
+1. En **Empleados**, crea un empleado ficticio con un código nuevo, por ejemplo `DEMO13-A`. Espera la confirmación.
+2. En **Horarios**, crea `BASE13-A`. Para un horario continuo, selecciona el día de la prueba e introduce `08:00-16:00`. En uno partido, separa los tramos con comas. En uno por turnos, escribe el tramo de cada día laborable y deja los días libres en blanco.
+3. En **Asignaciones**, introduce ambos códigos y un período que incluya la fecha de la prueba. Las dos fechas son inclusivas. Si un período se solapa, el backend explica el conflicto y conserva la asignación previa.
+4. Abre **Registro** y ficha una entrada y una salida con el mismo código de empleado. En **Consulta diaria**, busca el código y la fecha UTC del fichaje. Con el horario continuo anterior deben aparecer 480 minutos previstos y los fichajes de esa fecha. Los minutos trabajados dependen del tiempo entre fichajes.
+
+`AdminPanel` recoge los datos del formulario. `AdministrationGateway` define las tres operaciones que necesita el escritorio. `HttpAdministrationGateway` construye las peticiones JSON y utiliza `HttpClient.sendAsync`. La ventana muestra el resultado en el hilo de eventos de Swing y espera la confirmación antes de permitir otro envío. El backend sigue resolviendo los duplicados, los solapamientos y las reglas de los horarios.
+
 ## Aplicación de consulta diaria
 
 Se necesita JDK 27, Maven y un escritorio gráfico. Desde la raíz del repositorio, compila el proyecto y arranca el backend. Compose conserva el volumen de datos al reconstruir la imagen.
@@ -954,7 +970,9 @@ El 16 de noviembre de 2026, después de que el usuario reconstruyera el backend,
 
 ### Verificación de la sesión 12
 
-En la ejecución completa con JDK 27 del 20 de noviembre de 2026 se contabilizaron 195 pruebas. Pasaron 152. Las 43 restantes encontraron un error de apertura o conexión de sockets locales en el entorno de ejecución. El resultado global fue `BUILD FAILURE`. En el módulo de consulta pasaron 38 de 39 pruebas, incluidas las cuatro integraciones por HTTP en memoria. La prueba restante utiliza TCP real. Los detalles por módulo figuran en los informes de Surefire generados por Maven. Para cerrar la sesión hay que repetir `mvn clean verify` con acceso TCP local y comprobar el escritorio con el despliegue.
+Los informes de Surefire del proyecto de IntelliJ del 20 de noviembre registraron posteriormente 195 pruebas superadas, incluidas las de TCP local. La primera ejecución en el entorno restringido figura a continuación.
+
+En la ejecución completa con JDK 27 del 20 de noviembre de 2026 se contabilizaron 195 pruebas. Pasaron 152. Las 43 restantes encontraron un error de apertura o conexión de sockets locales en el entorno de ejecución. El resultado global fue `BUILD FAILURE`. En el módulo de consulta pasaron 38 de 39 pruebas, incluidas las cuatro integraciones por HTTP en memoria. La prueba restante utiliza TCP real. Los detalles por módulo figuran en los informes de Surefire generados por Maven. El recorrido manual del escritorio con Docker queda pendiente.
 
 ### Requisitos para ejecutar Maven
 
@@ -968,7 +986,7 @@ Desde la raíz del proyecto:
 mvn clean verify
 ```
 
-El proyecto padre construye los cinco módulos en el orden establecido por las dependencias.
+El proyecto padre construye los seis módulos en el orden establecido por las dependencias.
 
 También puede utilizarse IntelliJ IDEA:
 
@@ -1057,7 +1075,7 @@ Entre los escenarios comprobados se encuentran:
 - Rechazo de periodos solapados.
 - Recuperación de registros después de recrear el contenedor Docker.
 
-La sesión 12 incorpora integración HTTP de asistencia y fichajes con repositorios temporales. La cobertura completa de los flujos administrativos corresponde a la siguiente aplicación.
+La sesión 12 incorpora integración HTTP de asistencia y fichajes con repositorios temporales. La sesión 13 añade pruebas de altas y asignaciones, horarios partidos y nocturnos, duplicados, solapamientos, respuestas HTTP y comportamiento del formulario mientras espera al servidor.
 
 ---
 
@@ -1082,7 +1100,7 @@ El proyecto continúa en desarrollo y no constituye todavía una solución de pr
 
 ### Aplicaciones de usuario
 
-Los escritorios de registro y consulta están implementados. Queda la aplicación para administrar empleados, horarios y asignaciones, y concretar el alcance de las guardias.
+Están implementados los escritorios de administración, registro y consulta. Queda por concretar el alcance de las guardias.
 
 ### Integración funcional
 
@@ -1111,7 +1129,7 @@ Los escritorios de registro y consulta están implementados. Queda la aplicació
 ### Verificación y despliegue
 
 - Ampliar las pruebas HTTP a todos los endpoints administrativos.
-- Pruebas de integración de la futura aplicación de administración.
+- Ampliar el recorrido de los tres escritorios contra el despliegue de Docker.
 - Completar y documentar el recorrido manual de Swing conectado al backend.
 - Integración completa de todos los componentes.
 - Evaluación de un mecanismo de mensajería si aporta valor a la arquitectura.
@@ -1123,6 +1141,6 @@ El desarrollo continuará priorizando las funcionalidades exigidas, la simplicid
 
 ## Objetivo de las siguientes iteraciones
 
-La sesión 13 prevé administrar empleados, horarios y asignaciones desde un tercer escritorio. El recorrido de aceptación será dar de alta un empleado de prueba, asignarle un horario, fichar y consultar la jornada en los dos escritorios existentes. Se revisará cómo validar nuevos fichajes frente al catálogo conservando la lectura de los datos anteriores.
+El siguiente recorrido manual enlaza los tres escritorios con el backend desplegado. También queda por revisar la validación de nuevos fichajes frente al catálogo, conservando la lectura de los registros anteriores.
 
-Una vez desarrolladas estas interfaces, se completarán las integraciones funcionales, las pruebas y la documentación de entrega.
+Queda por recoger la evidencia del recorrido manual antes de la entrega.
