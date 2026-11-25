@@ -12,9 +12,17 @@ El objetivo es construir un sistema modular, mantenible y verificable, capaz de 
 
 ## Estado actual del proyecto
 
-**Estado: en desarrollo.**
+**Última verificación en `develop` · 25 de noviembre de 2026.** Los tres escritorios Swing completaron el recorrido de administración, registro y consulta contra el backend de Docker Compose por TCP local. La compilación del 23 de noviembre con JDK 27 había superado las 204 pruebas de los seis módulos.
 
-Actualmente se han implementado:
+### Sesión 14 · Un empleado, un horario y dos fichajes
+
+Administración asignó al empleado de prueba una jornada de 08:00 a 16:00. Registro obtuvo del servidor los justificantes de entrada a las 13:23:48 UTC y de salida a las 13:24:53 UTC. Consulta diaria mostró ambos fichajes en el centro `AULA14` y el estado **Presente**. Los 65 segundos transcurridos computaron como un minuto trabajado. Para una jornada prevista de 480 minutos, el balance fue de **−479 minutos**. Al repetir la asignación para el mismo período, el servidor rechazó el solapamiento.
+
+![Consulta diaria con la entrada, la salida y el balance de −479 minutos](docs/sesion14/20261125-132344-bec03b/04-consulta.png)
+
+[Informe del recorrido automatizado y cinco capturas de los tres escritorios](docs/sesion14/20261125-132344-bec03b/RESULTADO.md)
+
+### Funcionalidad implementada
 
 - Modelo de dominio para empleados, lugares y fichajes.
 - Registro y consulta de eventos de entrada y salida.
@@ -37,7 +45,7 @@ Actualmente se han implementado:
 
 **Sesión 12 · Consulta diaria e incidencias.**
 
-La consulta recupera el horario asignado y muestra los indicadores calculados por el servidor junto con los fichajes del día UTC. Los dos escritorios se pueden abrir al mismo tiempo. La guía de ejecución y el ejemplo HTTP están en la sección de consulta.
+La consulta recupera el horario asignado y muestra los indicadores calculados por el servidor junto con los fichajes del día UTC. La guía de ejecución y el ejemplo HTTP están en la sección de consulta.
 
 La revisión asíncrona del 18 de noviembre de 2026 superó **143 pruebas** sin fallos, errores ni pruebas omitidas. El resultado de la primera versión de la sesión 11 se conserva en la sección de compilación y pruebas.
 
@@ -957,7 +965,7 @@ El 16 de noviembre de 2026, después de que el usuario reconstruyera el backend,
 | AssertJ | Aserciones expresivas en pruebas |
 | Javalin 7 | Servidor y API HTTP |
 | Jackson | Conversión de datos JSON |
-| Swing | Formulario de escritorio para registrar fichajes |
+| Swing | Escritorios de administración, registro de fichajes y consulta diaria |
 | Java HttpClient | Comunicación del frontend con la API |
 | Docker | Contenedorización del backend |
 | Docker Compose | Configuración y ejecución del contenedor |
@@ -968,11 +976,27 @@ El 16 de noviembre de 2026, después de que el usuario reconstruyera el backend,
 
 ## Compilación y pruebas
 
+### Verificación del 23 de noviembre · Sesión 13
+
+`mvn clean verify` con JDK 27 completó las 204 pruebas con cero fallos, errores u omisiones. Los informes de Maven Surefire distribuyen las pruebas así.
+
+| Módulo | Pruebas superadas |
+|---|---:|
+| `domain` | 35 |
+| `application` | 31 |
+| `backend` | 24 |
+| `frontend-register` | 66 |
+| `frontend-query` | 39 |
+| `frontend-admin` | 9 |
+| **Total** | **204** |
+
+El 25 de noviembre se realizó además el recorrido automatizado con los paneles Swing y el backend en Docker. [Resultados de la sesión 14](docs/sesion14/20261125-132344-bec03b/RESULTADO.md)
+
 ### Verificación de la sesión 12
 
 Los informes de Surefire del proyecto de IntelliJ del 20 de noviembre registraron posteriormente 195 pruebas superadas, incluidas las de TCP local. La primera ejecución en el entorno restringido figura a continuación.
 
-En la ejecución completa con JDK 27 del 20 de noviembre de 2026 se contabilizaron 195 pruebas. Pasaron 152. Las 43 restantes encontraron un error de apertura o conexión de sockets locales en el entorno de ejecución. El resultado global fue `BUILD FAILURE`. En el módulo de consulta pasaron 38 de 39 pruebas, incluidas las cuatro integraciones por HTTP en memoria. La prueba restante utiliza TCP real. Los detalles por módulo figuran en los informes de Surefire generados por Maven. El recorrido manual del escritorio con Docker queda pendiente.
+En la primera ejecución con JDK 27 del 20 de noviembre de 2026 se contabilizaron 195 pruebas. Pasaron 152. Las 43 restantes encontraron un error de apertura o conexión de sockets locales en el entorno de ejecución. El resultado global fue `BUILD FAILURE`. En el módulo de consulta pasaron 38 de 39 pruebas, incluidas las cuatro integraciones por HTTP en memoria. La prueba restante utiliza TCP real.
 
 ### Requisitos para ejecutar Maven
 
@@ -1064,7 +1088,7 @@ Las pruebas de persistencia utilizan directorios temporales para evitar modifica
 
 ### Pruebas manuales de integración
 
-Además de las 77 pruebas automatizadas, se realizaron comprobaciones HTTP con PowerShell y `Invoke-RestMethod`.
+En la etapa que contaba con 77 pruebas automatizadas también se realizaron comprobaciones HTTP con PowerShell y `Invoke-RestMethod`.
 
 Entre los escenarios comprobados se encuentran:
 
@@ -1129,11 +1153,7 @@ Están implementados los escritorios de administración, registro y consulta. Qu
 ### Verificación y despliegue
 
 - Ampliar las pruebas HTTP a todos los endpoints administrativos.
-- Ampliar el recorrido de los tres escritorios contra el despliegue de Docker.
-- Completar y documentar el recorrido manual de Swing conectado al backend.
-- Integración completa de todos los componentes.
 - Evaluación de un mecanismo de mensajería si aporta valor a la arquitectura.
-- Documentación y capturas de las tres aplicaciones terminadas.
 
 El desarrollo continuará priorizando las funcionalidades exigidas, la simplicidad del diseño, la corrección del dominio y la reproducibilidad de las pruebas.
 
@@ -1141,6 +1161,4 @@ El desarrollo continuará priorizando las funcionalidades exigidas, la simplicid
 
 ## Objetivo de las siguientes iteraciones
 
-El siguiente recorrido manual enlaza los tres escritorios con el backend desplegado. También queda por revisar la validación de nuevos fichajes frente al catálogo, conservando la lectura de los registros anteriores.
-
-Queda por recoger la evidencia del recorrido manual antes de la entrega.
+Antes de la entrega queda por verificar la compilación y el arranque desde una copia limpia de la versión que se vaya a evaluar. También queda por revisar la validación de nuevos fichajes frente al catálogo, conservando la lectura de los registros anteriores.
