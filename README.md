@@ -18,9 +18,27 @@ El objetivo es construir un sistema modular, mantenible y verificable, capaz de 
 
 Administración asignó al empleado de prueba una jornada de 08:00 a 16:00. Registro obtuvo del servidor los justificantes de entrada a las 13:23:48 UTC y de salida a las 13:24:53 UTC. Consulta diaria mostró ambos fichajes en el centro `AULA14` y el estado **Presente**. Los 65 segundos transcurridos computaron como un minuto trabajado. Para una jornada prevista de 480 minutos, el balance fue de **−479 minutos**. Al repetir la asignación para el mismo período, el servidor rechazó el solapamiento.
 
+### Capturas de los tres módulos
+
+**Registro de asistencia.** El justificante identifica al empleado, el centro de trabajo y la hora de entrada que asignó el servidor.
+
+![Registro de asistencia con la entrada confirmada](docs/sesion14/20261125-132344-bec03b/02-entrada.png)
+
+**Consulta de presencia.** Los dos fichajes del día permiten contrastar el cálculo de minutos y la incidencia de llegada con retraso.
+
 ![Consulta diaria con la entrada, la salida y el balance de −479 minutos](docs/sesion14/20261125-132344-bec03b/04-consulta.png)
 
 [Informe del recorrido automatizado y cinco capturas de los tres escritorios](docs/sesion14/20261125-132344-bec03b/RESULTADO.md)
+
+**Definición de horarios.** El formulario de Administración muestra el tipo, los días laborables, los tramos y la confirmación de que se ha creado el horario. En el ejemplo del restaurante la pausa de 14:00 a 18:00 separa los dos tramos.
+
+![Definición del horario partido del restaurante en la pestaña Horarios](docs/horarios/02-restaurante.png)
+
+Se comprobaron también la jornada continua de oficina y el turno nocturno de hospital. [Ejemplos de los tres horarios y comprobación de persistencia](docs/horarios/VERIFICACION.md)
+
+### Aportación del proyecto · Consulta de jornadas nocturnas
+
+Un turno de hospital puede empezar el lunes a las 22:00 y acabar el martes a las 06:00. El resumen atribuye las ocho horas al lunes y la tabla conserva cada fichaje en su fecha UTC real. Así se puede explicar la duración completa del turno y localizar la salida en el historial del martes sin contabilizarla dos veces. La prueba `AttendanceHttpIntegrationTest.preservesCalendarDayScopeForOvernightWork` comprueba la duración de 480 minutos y el contenido de la tabla del día de entrada.
 
 ### Funcionalidad implementada
 
@@ -992,6 +1010,8 @@ El 16 de noviembre de 2026, después de que el usuario reconstruyera el backend,
 
 El 25 de noviembre se realizó además el recorrido automatizado con los paneles Swing y el backend en Docker. [Resultados de la sesión 14](docs/sesion14/20261125-132344-bec03b/RESULTADO.md)
 
+En un ensayo independiente se reinició Javalin sobre el mismo directorio temporal. Las lecturas HTTP recuperaron los horarios, el empleado, la asignación y los fichajes. El resumen volvió a mostrar la incidencia de retraso calculada a partir de esos datos. [Procedimiento y resultados](docs/horarios/VERIFICACION.md)
+
 ### Verificación de la sesión 12
 
 Los informes de Surefire del proyecto de IntelliJ del 20 de noviembre registraron posteriormente 195 pruebas superadas, incluidas las de TCP local. La primera ejecución en el entorno restringido figura a continuación.
@@ -1129,6 +1149,7 @@ Están implementados los escritorios de administración, registro y consulta. Qu
 ### Integración funcional
 
 - Validar los fichajes contra el catálogo persistente de empleados.
+- Ampliar la consulta de un empleado, actualmente filtrada por una fecha UTC, a un intervalo de fechas.
 - Definir la gestión de incidencias que requieran revisión o justificación manual.
 - Incorporar una gestión completa de guardias y sus activaciones.
 - Incorporar rotaciones automáticas de varias semanas.
