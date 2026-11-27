@@ -11,6 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -38,17 +39,18 @@ public final class HttpAttendanceGateway implements AttendanceGateway {
 
     @Override
     public CompletableFuture<DailyIndicators> attendance(DayQuery query) {
-        return get("attendance", query).thenApply(body -> json.indicators(body, query));
+        return get("attendance", query, query.date()).thenApply(body -> json.indicators(body, query));
     }
 
     @Override
-    public CompletableFuture<List<Punch>> punches(DayQuery query) {
-        return get("punches", query).thenApply(body -> json.punches(body, query));
+    public CompletableFuture<List<Punch>> punches(DayQuery query, LocalDate through) {
+        return get("punches", query, through).thenApply(body -> json.punches(body, query, through));
     }
 
-    private CompletableFuture<String> get(String resource, DayQuery query) {
+    private CompletableFuture<String> get(String resource, DayQuery query, LocalDate through) {
         String employee = URLEncoder.encode(query.employeeId(), StandardCharsets.UTF_8);
-        URI uri = api.resolve(resource + "?employeeId=" + employee + "&date=" + query.date());
+        String dates = query.date().equals(through) ? "&date=" + query.date() : "&from=" + query.date() + "&to=" + through;
+        URI uri = api.resolve(resource + "?employeeId=" + employee + dates);
         var request = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10))
                 .header("Accept", "application/json").GET().build();
         return exchange.apply(request).exceptionally(error -> {

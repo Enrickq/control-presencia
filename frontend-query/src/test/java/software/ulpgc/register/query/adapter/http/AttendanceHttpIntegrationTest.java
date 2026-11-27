@@ -4,6 +4,7 @@ import io.javalin.Javalin;
 import org.eclipse.jetty.server.LocalConnector;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
+
 import software.ulpgc.register.domain.model.*;
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
 import software.ulpgc.register.infrastructure.configuration.ServerMain;
@@ -83,6 +84,61 @@ class AttendanceHttpIntegrationTest {
         var invalid = exchange("GET", "/api/v1/attendance?employeeId=DEMO&date=2026-02-30", "");
         assertThat(invalid.status()).isEqualTo(400);
         assertThat(invalid.body()).contains("INVALID_DATE");
+    }
+
+    @Test void rejectsAnUnknownEmployeeBeforeWritingAndAcceptsTheSamePunchAfterRegistration() {
+        String entry = """
+                {"employeeId":"DEMO","employeeName":"Persona de prueba","placeId":"SALA","placeName":"Sala","type":"IN"}""";
+        var rejected = exchange("POST", "/api/v1/punches", entry);
+        assertThat(rejected.status()).isEqualTo(400);
+        assertThat(rejected.body()).contains("Employee does not exist");
+        employee();
+        assertThat(exchange("POST", "/api/v1/punches", entry).status()).isEqualTo(201);
+        assertThat(exchange("POST", "/api/v1/punches", entry).status()).isEqualTo(409);
+    }
+
+    @Test void periodReadsBothInclusiveDatesAcrossYearsAndPreservesHistoricalPunches() {
+        punch("2026-12-30T23:59:59Z", TrackingType.Out);
+        punch("2026-12-31T22:00:00Z", TrackingType.In);
+        punch("2027-01-01T06:00:00Z", TrackingType.Out);
+        punch("2027-01-02T00:00:00Z", TrackingType.In);
+        new FileEventStore(dir.toFile()).register(new TrackingEvent(Instant.parse("2026-12-31T23:00:00Z"),
+                new Employee("OTRA", "Otra persona"), new Place("SALA", "Sala"), TrackingType.In));
+        var first = DayQuery.parse("DEMO", "2026-12-31");
+        assertThat(gateway.punches(first, first.date().plusDays(1)).join()).extracting(Punch::timestamp)
+                .containsExactly(Instant.parse("2026-12-31T22:00:00Z"), Instant.parse("2027-01-01T06:00:00Z"));
+        assertThat(gateway.punches(first).join()).hasSize(1);
+    }
+
+    @Test void rejectsMixedIncompleteAndReversedPeriodParameters() {
+        String url = "/api/v1/punches?employeeId=DEMO&";
+        for (String dates : java.util.List.of("from=2026-11-25", "to=2026-11-25",
+                "date=2026-11-25&to=2026-11-26", "from=2026-11-26&to=2026-11-25",
+                "from=2026-02-30&to=2026-11-26"))
+            assertThat(exchange("GET", url + dates, "").status()).as(dates).isEqualTo(400);
+    }
+
+    @Test void retainsScheduleChangesAndReproducesTheEarlierIncidentAfterRestart() {
+        configureDay();
+        punch("2026-11-20T08:10:00Z", TrackingType.In);
+        punch("2026-11-20T15:55:00Z", TrackingType.Out);
+        var original = gateway.attendance(query).join();
+        post("schedules", """
+            {"type":"CONTINUOUS","id":"TARDE","name":"Tarde","workingDays":["FRIDAY"],"slot":{"start":"14:00","end":"20:00"}}""");
+        post("assignments", """
+            {"employeeId":"DEMO","scheduleId":"TARDE","validFrom":"2026-12-01","validThrough":"2026-12-31"}""");
+
+        stop();
+        start();
+        var history = exchange("GET", "/api/v1/employees/DEMO/assignments", "");
+        assertThat(history.status()).isEqualTo(200);
+        assertThat(history.body()).contains("DIA", "TARDE", "2026-11-30", "2026-12-01");
+        assertThat(gateway.attendance(query).join()).isEqualTo(original);
+        assertThat(original.incidents().orElseThrow()).containsExactly("LATE_ARRIVAL");
+        assertThat(original.balanceMinutes()).isEqualTo(-15);
+        var december = gateway.attendance(DayQuery.parse("DEMO", "2026-12-04")).join();
+        assertThat(december.expectedMinutes()).isEqualTo(360);
+        assertThat(december.incidents().orElseThrow()).containsExactly("ABSENCE");
     }
 
     private void configureDay() {

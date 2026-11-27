@@ -3,6 +3,7 @@ package software.ulpgc.register.frontend.adapter.http;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import software.ulpgc.register.frontend.model.PunchData;
 import software.ulpgc.register.frontend.model.PunchReceipt;
 import software.ulpgc.register.frontend.model.PunchType;
@@ -103,9 +104,10 @@ public final class HttpPunchGateway implements PunchGateway, AutoCloseable {
     private PunchException failure(HttpResponse<String> response) {
         int status = response.statusCode();
         return switch (status) {
-            case 400 -> new PunchException(BAD_REQUEST,
-                    "El servidor ha rechazado los datos. Revisa el empleado, el centro y el tipo de fichaje.");
-            case 409 -> new PunchException(CONFLICT, conflictMessage(response.body()));
+            case 400 -> new PunchException(BAD_REQUEST, "Employee does not exist".equals(serverMessage(response.body()))
+                    ? "El empleado no está registrado. Créalo en Administración antes de fichar."
+                    : "El servidor ha rechazado los datos. Revisa el empleado, el centro y el tipo de fichaje.");
+            case 409 -> new PunchException(CONFLICT, conflictMessage(serverMessage(response.body())));
             case 404 -> new PunchException(BAD_REQUEST,
                     "No se encuentra la API de fichajes. Revisa la dirección del servidor.");
             case 401, 403 -> new PunchException(BAD_REQUEST,
@@ -115,13 +117,15 @@ public final class HttpPunchGateway implements PunchGateway, AutoCloseable {
         };
     }
 
-    private String conflictMessage(String body) {
-        String message;
+    private String serverMessage(String body) {
         try {
-            message = text(mapper.readTree(body), "message");
+            return text(mapper.readTree(body), "message");
         } catch (IOException | IllegalArgumentException error) {
-            message = "";
+            return "";
         }
+    }
+
+    private String conflictMessage(String message) {
         return switch (message) {
             case "Employee is already checked in" ->
                     "Ya hay una entrada abierta para este empleado. Registra una salida antes de volver a entrar.";

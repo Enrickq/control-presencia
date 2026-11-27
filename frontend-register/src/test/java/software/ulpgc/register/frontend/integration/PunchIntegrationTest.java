@@ -10,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+
 import software.ulpgc.register.application.usecase.AssignScheduleToEmployee;
 import software.ulpgc.register.application.usecase.ListTrackingEvents;
 import software.ulpgc.register.application.usecase.ReadAdministrationData;
@@ -193,6 +194,9 @@ class PunchIntegrationTest {
     private void startServer() {
         var events = new FileEventStore(dataDirectory.toFile());
         var employees = new FileEmployeeRepository(dataDirectory.resolve("employees.jsonl"));
+        if (employees.findById(EMPLOYEE_ID).isEmpty()) {
+            new RegisterEmployee(employees).execute(EMPLOYEE_ID, "Persona de prueba");
+        }
         var schedules = new FileScheduleRepository(dataDirectory.resolve("schedules.jsonl"));
         var assignments = new FileScheduleAssignmentRepository(dataDirectory.resolve("assignments.jsonl"));
         var administration = new AdministrationHandlers(
@@ -200,7 +204,7 @@ class PunchIntegrationTest {
                 new RegisterSchedule(schedules),
                 new AssignScheduleToEmployee(employees, schedules, assignments),
                 new ReadAdministrationData(employees, schedules, assignments));
-        server = ApiServer.create(new RegisterTrackingEvent(events), new ListTrackingEvents(events), administration)
+        server = ApiServer.create(new RegisterTrackingEvent(events, employees), new ListTrackingEvents(events), administration)
                 .start("127.0.0.1", 0);
     }
 }

@@ -12,4 +12,5 @@ public interface TrackingEventsQuery {
             LocalDate date,
             String employeeId
     );
+    List<StoredTrackingEvent> execute(LocalDate from, LocalDate through, String employeeId);
 }

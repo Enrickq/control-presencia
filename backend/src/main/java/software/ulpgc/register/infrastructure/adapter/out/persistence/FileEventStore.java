@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 import static java.nio.file.StandardOpenOption.APPEND;
@@ -23,7 +24,7 @@ import static java.nio.file.StandardOpenOption.CREATE;
 public record FileEventStore(File root) implements EventStore {
 
     @Override
-    public void register(TrackingEvent event) {
+    public synchronized void register(TrackingEvent event) {
         Path file = fileFor(LocalDate.ofInstant(event.ts(), ZoneOffset.UTC));
         try {
             Files.createDirectories(file.getParent());
@@ -34,10 +35,39 @@ public record FileEventStore(File root) implements EventStore {
     }
 
     @Override
-    public List<StoredTrackingEvent> read(LocalDate day) {
+    public synchronized List<StoredTrackingEvent> read(LocalDate day) {
         Path file = fileFor(day);
         if (Files.notExists(file)) return List.of();
 
+        return readFile(file);
+    }
+
+    @Override
+    public synchronized List<StoredTrackingEvent> read(LocalDate from, LocalDate through) {
+        Path base = root.toPath();
+        if (Files.notExists(base)) return List.of();
+        try (var files = Files.walk(base, 2)) {
+            return files.filter(Files::isRegularFile)
+                    .filter(file -> isEventFileInRange(file, from, through))
+                    .flatMap(file -> readFile(file).stream())
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException("Could not list tracking event files", e);
+        }
+    }
+
+    private boolean isEventFileInRange(Path path, LocalDate from, LocalDate through) {
+        String name = path.getFileName().toString();
+        if (!name.endsWith(".log")) return false;
+        try {
+            LocalDate day = LocalDate.parse(name.substring(0, name.length() - 4), DateTimeFormatter.BASIC_ISO_DATE);
+            return path.equals(fileFor(day)) && !day.isBefore(from) && !day.isAfter(through);
+        } catch (DateTimeParseException ignored) {
+            return false;
+        }
+    }
+
+    private static List<StoredTrackingEvent> readFile(Path file) {
         try (var lines = Files.lines(file, StandardCharsets.UTF_8)) {
             return lines.map(FileEventStore::parse).toList();
         } catch (IOException e) {

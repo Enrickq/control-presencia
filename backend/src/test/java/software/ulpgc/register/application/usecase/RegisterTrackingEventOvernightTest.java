@@ -2,13 +2,15 @@ package software.ulpgc.register.application.usecase;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
 import software.ulpgc.register.application.port.out.EventStore;
-import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
 import software.ulpgc.register.domain.model.Employee;
 import software.ulpgc.register.domain.model.Place;
 import software.ulpgc.register.domain.model.StoredTrackingEvent;
 import software.ulpgc.register.domain.model.TrackingEvent;
 import software.ulpgc.register.domain.model.TrackingType;
+import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEmployeeRepository;
+import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -32,7 +34,7 @@ class RegisterTrackingEventOvernightTest {
     void shouldAllowExitOnFollowingDay() {
         EventStore store = new FileEventStore(tempDir.toFile());
         RegisterTrackingEvent registrar =
-                new RegisterTrackingEvent(store);
+                registrar(store);
 
         registrar.execute(event(
                 "2026-11-04T22:00:00Z",
@@ -53,7 +55,7 @@ class RegisterTrackingEventOvernightTest {
     void shouldRejectDuplicateEntryAfterMidnight() {
         EventStore store = new FileEventStore(tempDir.toFile());
         RegisterTrackingEvent registrar =
-                new RegisterTrackingEvent(store);
+                registrar(store);
 
         registrar.execute(event(
                 "2026-11-04T22:00:00Z",
@@ -73,7 +75,7 @@ class RegisterTrackingEventOvernightTest {
     void shouldHandleYearBoundary() {
         EventStore store = new FileEventStore(tempDir.toFile());
         RegisterTrackingEvent registrar =
-                new RegisterTrackingEvent(store);
+                registrar(store);
 
         registrar.execute(event(
                 "2026-12-31T22:00:00Z",
@@ -88,6 +90,12 @@ class RegisterTrackingEventOvernightTest {
         assertThat(store.read(LocalDate.of(2027, 1, 1)))
                 .extracting(StoredTrackingEvent::type)
                 .containsExactly(TrackingType.Out);
+    }
+
+    private RegisterTrackingEvent registrar(EventStore store) {
+        var employees = new FileEmployeeRepository(tempDir.resolve("employees.jsonl"));
+        employees.save(employee);
+        return new RegisterTrackingEvent(store, employees);
     }
 
     private TrackingEvent event(String timestamp, TrackingType type) {

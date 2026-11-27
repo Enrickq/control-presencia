@@ -3,13 +3,15 @@ package software.ulpgc.register.application.usecase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+
 import software.ulpgc.register.application.port.out.EventStore;
-import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
 import software.ulpgc.register.domain.model.Employee;
 import software.ulpgc.register.domain.model.Place;
 import software.ulpgc.register.domain.model.StoredTrackingEvent;
 import software.ulpgc.register.domain.model.TrackingEvent;
 import software.ulpgc.register.domain.model.TrackingType;
+import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEmployeeRepository;
+import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
 
 import java.nio.file.Path;
 import java.time.Instant;
@@ -37,7 +39,10 @@ class RegisterTrackingEventTest {
     @BeforeEach
     void setUp() {
         eventStore = new FileEventStore(tempDir.toFile());
-        registrar = new RegisterTrackingEvent(eventStore);
+        var employees = new FileEmployeeRepository(tempDir.resolve("employees.jsonl"));
+        employees.save(employee);
+        employees.save(new Employee("EMP-002", "Another Employee"));
+        registrar = new RegisterTrackingEvent(eventStore, employees);
     }
 
     @Test

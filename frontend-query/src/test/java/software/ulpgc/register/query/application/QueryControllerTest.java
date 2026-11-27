@@ -3,16 +3,18 @@ package software.ulpgc.register.query.application;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+
 import software.ulpgc.register.query.model.*;
 import software.ulpgc.register.query.port.*;
 
-import javax.swing.SwingUtilities;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import javax.swing.SwingUtilities;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,15 +69,27 @@ class QueryControllerTest {
         assertThat(view.events).containsExactly("inválido");
     }
 
+    @Test void aPeriodShowsOnlyPunchesAndRejectsReversedDates() throws Exception {
+        SwingUtilities.invokeAndWait(() -> controller.search("DEMO", "2026-11-25", "2026-11-20"));
+        assertThat(view.events).containsExactly("inválido");
+        assertThat(gateway.reads).isZero();
+        SwingUtilities.invokeAndWait(() -> controller.search("DEMO", "2026-11-20", "2026-11-25"));
+        assertThat(gateway.reads).isOne();
+        gateway.punches.complete(List.of());
+        assertThat(view.finished.await(5, TimeUnit.SECONDS)).isTrue();
+        assertThat(view.events).containsExactly("inválido", "período 2026-11-25", "fichajes", "fin");
+    }
+
     static class StubGateway implements AttendanceGateway {
         final CompletableFuture<DailyIndicators> attendance = new CompletableFuture<>();
         final CompletableFuture<List<Punch>> punches = new CompletableFuture<>();
         int reads;
         public CompletableFuture<DailyIndicators> attendance(DayQuery query) { reads++; return attendance; }
-        public CompletableFuture<List<Punch>> punches(DayQuery query) { reads++; return punches; }
+        public CompletableFuture<List<Punch>> punches(DayQuery query, LocalDate through) { reads++; return punches; }
     }
 
     static class RecordingView implements QueryController.View {
+        public void beginPeriod(DayQuery query, LocalDate through) { events.add("período " + through); }
         final List<String> events = new ArrayList<>();
         final CountDownLatch finished = new CountDownLatch(1);
         boolean allOnEdt = true;

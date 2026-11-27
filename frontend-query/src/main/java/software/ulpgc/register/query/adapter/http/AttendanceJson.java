@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import software.ulpgc.register.query.model.*;
 import software.ulpgc.register.query.port.QueryException;
 
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,13 +33,14 @@ final class AttendanceJson {
                 minutes(row, "lateMinutes"), number(row, "balanceMinutes"), text(row, "status"), incidents);
     }
 
-    List<Punch> punches(String body, DayQuery query) {
+    List<Punch> punches(String body, DayQuery query, LocalDate through) {
         List<Punch> result = new ArrayList<>();
         for (JsonNode row : array(document(body))) {
             try {
                 Instant timestamp = Instant.parse(text(row, "timestamp"));
-                if (!query.employeeId().equals(text(row, "employeeId"))
-                        || !query.date().equals(timestamp.atZone(ZoneOffset.UTC).toLocalDate())) throw invalid();
+                var day = timestamp.atZone(ZoneOffset.UTC).toLocalDate();
+                if (!query.employeeId().equals(text(row, "employeeId")) || day.isBefore(query.date()) || day.isAfter(through))
+                    throw invalid();
                 result.add(new Punch(timestamp, text(row, "placeId"), Punch.Type.valueOf(text(row, "type"))));
             } catch (DateTimeException | IllegalArgumentException error) {
                 throw invalid();

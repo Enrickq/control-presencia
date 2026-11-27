@@ -43,7 +43,7 @@ public final class QueryMain {
             SwingUtilities.invokeLater(() -> {
                 QueryPanel panel = new QueryPanel();
                 panel.bind(new QueryController(gateway, panel, SwingUtilities::invokeLater));
-                JFrame frame = new JFrame("Control de Presencia · Consulta diaria");
+                JFrame frame = new JFrame("Control de Presencia · Consulta de asistencia");
                 frame.setContentPane(panel);
                 frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
                 frame.addWindowListener(new WindowAdapter() {

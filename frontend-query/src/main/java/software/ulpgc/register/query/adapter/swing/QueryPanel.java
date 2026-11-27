@@ -5,21 +5,22 @@ import software.ulpgc.register.query.model.DailyIndicators;
 import software.ulpgc.register.query.model.DayQuery;
 import software.ulpgc.register.query.model.Punch;
 
-import javax.swing.*;
-import javax.swing.border.EmptyBorder;
-import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableModel;
 
 public final class QueryPanel extends JPanel implements QueryController.View {
     private static final DateTimeFormatter UTC = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss")
             .withZone(ZoneOffset.UTC);
     private final JTextField employee = new JTextField(14);
     private final JTextField date = new JTextField(LocalDate.now(ZoneOffset.UTC).toString(), 10);
+    private final JTextField through = new JTextField(10);
     private final JButton search = new JButton("Consultar");
     private final JLabel context = new JLabel("Introduce el empleado y la fecha de la consulta.");
     private final JTextArea summary = readOnlyText(4);
@@ -35,9 +36,12 @@ public final class QueryPanel extends JPanel implements QueryController.View {
         JPanel form = new JPanel(new FlowLayout(FlowLayout.LEADING, 8, 4));
         addField(form, "Empleado", employee);
         addField(form, "Fecha (AAAA-MM-DD)", date);
-        form.add(search);
+        JPanel period = new JPanel(new FlowLayout(FlowLayout.LEADING, 8, 2));
+        addField(period, "Hasta (opcional, AAAA-MM-DD)", through);
+        period.add(search);
         JPanel header = new JPanel(new GridLayout(0, 1));
         header.add(form);
+        header.add(period);
         header.add(context);
         add(header, BorderLayout.NORTH);
 
@@ -47,7 +51,7 @@ public final class QueryPanel extends JPanel implements QueryController.View {
         JTable table = new JTable(rows);
         table.setFillsViewportHeight(true);
         table.getAccessibleContext().setAccessibleName("Fichajes del día UTC");
-        JPanel punches = section("Fichajes del día UTC", new JScrollPane(table));
+        JPanel punches = section("Fichajes (UTC)", new JScrollPane(table));
         punches.add(punchStatus, BorderLayout.SOUTH);
         JPanel results = new JPanel(new BorderLayout(0, 10));
         results.add(indicators, BorderLayout.NORTH);
@@ -80,9 +84,10 @@ public final class QueryPanel extends JPanel implements QueryController.View {
     }
 
     public void bind(QueryController controller) {
-        search.addActionListener(event -> controller.search(employee.getText(), date.getText()));
+        search.addActionListener(event -> controller.search(employee.getText(), date.getText(), through.getText()));
         employee.addActionListener(event -> search.doClick());
         date.addActionListener(event -> search.doClick());
+        through.addActionListener(event -> search.doClick());
     }
 
     @Override public void begin(DayQuery query) {
@@ -92,6 +97,15 @@ public final class QueryPanel extends JPanel implements QueryController.View {
         summary.setText("Consultando indicadores…");
         incidents.setText("Consultando incidencias…");
         punchStatus.setText("Consultando fichajes…");
+    }
+
+    @Override public void beginPeriod(DayQuery query, LocalDate throughDate) {
+        setFormEnabled(false);
+        context.setText("Fichajes de " + query.employeeId() + " del " + query.date() + " al " + throughDate + " (UTC)");
+        rows.setRowCount(0);
+        summary.setText("Para ver los indicadores diarios, consulta una sola fecha.");
+        incidents.setText("");
+        punchStatus.setText("Consultando fichajes.");
     }
 
     @Override public void invalidInput(String message) {
@@ -141,7 +155,7 @@ public final class QueryPanel extends JPanel implements QueryController.View {
         rows.setRowCount(0);
         for (Punch event : events)
             rows.addRow(new Object[]{UTC.format(event.timestamp()), event.type() == Punch.Type.IN ? "Entrada" : "Salida", event.placeId()});
-        punchStatus.setText(events.isEmpty() ? "Sin fichajes registrados en esta fecha." : "Fichajes: " + events.size());
+        punchStatus.setText(events.isEmpty() ? "Sin fichajes en las fechas consultadas." : "Fichajes: " + events.size());
     }
 
     @Override public void punchesError(String message) {
@@ -156,6 +170,7 @@ public final class QueryPanel extends JPanel implements QueryController.View {
     private void setFormEnabled(boolean enabled) {
         employee.setEnabled(enabled);
         date.setEnabled(enabled);
+        through.setEnabled(enabled);
         search.setEnabled(enabled);
     }
 }

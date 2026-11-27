@@ -4,24 +4,21 @@ package software.ulpgc.register.infrastructure.configuration;
 import io.javalin.Javalin;
 
 import software.ulpgc.register.application.usecase.AssignScheduleToEmployee;
+import software.ulpgc.register.application.usecase.CalculateDailyAttendance;
+import software.ulpgc.register.application.usecase.GetDailyAttendance;
 import software.ulpgc.register.application.usecase.ListTrackingEvents;
 import software.ulpgc.register.application.usecase.ReadAdministrationData;
 import software.ulpgc.register.application.usecase.RegisterEmployee;
 import software.ulpgc.register.application.usecase.RegisterSchedule;
 import software.ulpgc.register.application.usecase.RegisterTrackingEvent;
-
+import software.ulpgc.register.application.usecase.ResolveDailySchedule;
 import software.ulpgc.register.infrastructure.adapter.in.http.AdministrationHandlers;
 import software.ulpgc.register.infrastructure.adapter.in.http.ApiServer;
-
+import software.ulpgc.register.infrastructure.adapter.in.http.AttendanceHandlers;
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEmployeeRepository;
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileEventStore;
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileScheduleAssignmentRepository;
 import software.ulpgc.register.infrastructure.adapter.out.persistence.FileScheduleRepository;
-
-import software.ulpgc.register.application.usecase.CalculateDailyAttendance;
-import software.ulpgc.register.application.usecase.GetDailyAttendance;
-import software.ulpgc.register.application.usecase.ResolveDailySchedule;
-import software.ulpgc.register.infrastructure.adapter.in.http.AttendanceHandlers;
 
 
 import java.nio.file.Path;
@@ -95,7 +92,7 @@ public final class ServerMain {
                 );
 
         return ApiServer.create(
-                new RegisterTrackingEvent(events),
+                new RegisterTrackingEvent(events, employees),
                 new ListTrackingEvents(events),
                 administration,
                 attendance

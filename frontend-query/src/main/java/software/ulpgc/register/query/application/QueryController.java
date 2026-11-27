@@ -6,6 +6,7 @@ import software.ulpgc.register.query.model.Punch;
 import software.ulpgc.register.query.port.AttendanceGateway;
 import software.ulpgc.register.query.port.QueryException;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -16,6 +17,7 @@ import java.util.function.Supplier;
 public final class QueryController {
     public interface View {
         void begin(DayQuery query);
+        void beginPeriod(DayQuery first, LocalDate through);
         void invalidInput(String message);
         void indicators(DailyIndicators indicators);
         void attendanceError(String message);
@@ -37,18 +39,31 @@ public final class QueryController {
 
     /** La vista llama a este método desde su hilo de eventos. */
     public void search(String employee, String date) {
+        search(employee, date, "");
+    }
+
+    public void search(String employee, String date, String lastDate) {
         if (busy) return;
         DayQuery query;
+        LocalDate through;
         try {
             query = DayQuery.parse(employee, date);
+            through = lastDate == null || lastDate.isBlank() ? query.date() : DayQuery.parseDate(lastDate);
+            if (through.isBefore(query.date())) throw new IllegalArgumentException("La fecha final precede a la inicial.");
         } catch (IllegalArgumentException error) {
             view.invalidInput(error.getMessage());
             return;
         }
         busy = true;
-        view.begin(query);
-        var attendance = display(() -> gateway.attendance(query), view::indicators, view::attendanceError);
-        var punches = display(() -> gateway.punches(query), view::punches, view::punchesError);
+        CompletableFuture<Void> attendance;
+        if (query.date().equals(through)) {
+            view.begin(query);
+            attendance = display(() -> gateway.attendance(query), view::indicators, view::attendanceError);
+        } else {
+            view.beginPeriod(query, through);
+            attendance = CompletableFuture.completedFuture(null);
+        }
+        var punches = display(() -> gateway.punches(query, through), view::punches, view::punchesError);
         CompletableFuture.allOf(attendance, punches).whenCompleteAsync((ignored, error) -> {
             busy = false;
             view.finish();

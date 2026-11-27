@@ -1,15 +1,16 @@
 package software.ulpgc.register.query.adapter.swing;
 
 import org.junit.jupiter.api.Test;
+
 import software.ulpgc.register.query.model.*;
 
-import javax.swing.*;
 import java.awt.Component;
 import java.awt.Container;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
+import javax.swing.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,7 +41,7 @@ class QueryPanelTest {
             assertThat(components(view).filter(JTextArea.class::isInstance).map(JTextArea.class::cast)
                     .map(JTextArea::getText)).contains("Sin horario", "Incidencias no disponibles.");
             assertThat(components(view).filter(JLabel.class::isInstance).map(JLabel.class::cast)
-                    .map(JLabel::getText)).contains("Sin fichajes registrados en esta fecha.");
+                    .map(JLabel::getText)).contains("Sin fichajes en las fechas consultadas.");
         });
     }
 

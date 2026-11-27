@@ -1,10 +1,11 @@
 package software.ulpgc.register.application.usecase;
 
+import software.ulpgc.register.application.port.in.RegisterPunchCommand;
+import software.ulpgc.register.application.port.out.EmployeeRepository;
 import software.ulpgc.register.application.port.out.EventStore;
 import software.ulpgc.register.domain.model.StoredTrackingEvent;
 import software.ulpgc.register.domain.model.TrackingEvent;
 import software.ulpgc.register.domain.model.TrackingType;
-import software.ulpgc.register.application.port.in.RegisterPunchCommand;
 
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -12,10 +13,13 @@ import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-public record RegisterTrackingEvent(EventStore eventStore)
+public record RegisterTrackingEvent(EventStore eventStore, EmployeeRepository employees)
         implements RegisterPunchCommand {
 
-    public void execute(TrackingEvent event) {
+    public synchronized void execute(TrackingEvent event) {
+        if (employees.findById(event.employee().id()).isEmpty()) {
+            throw new IllegalArgumentException("Employee does not exist");
+        }
         Optional<StoredTrackingEvent> previous = lastEventOf(event);
         validate(event, previous);
         eventStore.register(event);

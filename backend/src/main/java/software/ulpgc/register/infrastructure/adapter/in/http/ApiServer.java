@@ -2,6 +2,8 @@
 package software.ulpgc.register.infrastructure.adapter.in.http;
 
 import io.javalin.Javalin;
+import io.javalin.http.NotFoundResponse;
+
 import software.ulpgc.register.application.port.in.RegisterPunchCommand;
 import software.ulpgc.register.application.port.in.TrackingEventsQuery;
 import software.ulpgc.register.domain.model.Employee;
@@ -9,7 +11,6 @@ import software.ulpgc.register.domain.model.Place;
 import software.ulpgc.register.domain.model.StoredTrackingEvent;
 import software.ulpgc.register.domain.model.TrackingEvent;
 import software.ulpgc.register.domain.model.TrackingType;
-import io.javalin.http.NotFoundResponse;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -117,19 +118,16 @@ public final class ApiServer {
                         "employeeId"
                 );
 
-                String dateText = required(
-                        ctx.queryParam("date"),
-                        "date"
-                );
-
-                LocalDate date = LocalDate.parse(dateText);
-
-                ctx.json(
-                        query.execute(date, employeeId)
-                                .stream()
-                                .map(ApiServer::toResponse)
-                                .toList()
-                );
+                String date = ctx.queryParam("date");
+                String from = ctx.queryParam("from");
+                String through = ctx.queryParam("to");
+                if (date != null && (from != null || through != null)) {
+                    throw new IllegalArgumentException("Use date or from and to");
+                }
+                var events = date != null
+                        ? query.execute(LocalDate.parse(required(date, "date")), employeeId)
+                        : query.execute(LocalDate.parse(required(from, "from")), LocalDate.parse(required(through, "to")), employeeId);
+                ctx.json(events.stream().map(ApiServer::toResponse).toList());
             });
 
 
