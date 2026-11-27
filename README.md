@@ -12,11 +12,21 @@ El objetivo es construir un sistema modular, mantenible y verificable, capaz de 
 
 ## Estado actual del proyecto
 
-**Última verificación en `develop` · 25 de noviembre de 2026.** Los tres escritorios Swing completaron el recorrido de administración, registro y consulta contra el backend de Docker Compose por TCP local. La compilación del 23 de noviembre con JDK 27 había superado las 204 pruebas de los seis módulos.
+### Sesión 15 · Registro y consulta por período
+
+El backend comprueba el código de empleado antes de guardar una entrada o salida. Consulta permite buscar los fichajes de una persona entre dos fechas UTC, incluidos ambos extremos. Al dejar **Hasta** vacío se conservan el resumen y las incidencias de la jornada.
+
+La prueba de trazabilidad asigna dos horarios sucesivos a una persona ficticia y reinicia el servidor sobre los mismos archivos. Para el viernes de noviembre recupera los 10 minutos de retraso y el balance de −15 minutos. Para el viernes de diciembre aplica el nuevo horario de seis horas y detecta la ausencia. El historial de asignaciones permite consultar ambos períodos.
+
+**Recorrido Swing del 27 de noviembre.** Los tres formularios usaron el backend Javalin mediante HTTP en memoria. La consulta del 27 al 28 mostró la entrada y la salida del empleado de prueba en el mismo orden que sus justificantes.
+
+![Consulta por período con los dos fichajes y sus marcas de tiempo UTC](docs/sesion15/07-consulta-periodo.png)
+
+[Informe y capturas de la sesión 15](docs/sesion15/RESULTADO.md)
 
 ### Sesión 14 · Un empleado, un horario y dos fichajes
 
-Administración asignó al empleado de prueba una jornada de 08:00 a 16:00. Registro obtuvo del servidor los justificantes de entrada a las 13:23:48 UTC y de salida a las 13:24:53 UTC. Consulta diaria mostró ambos fichajes en el centro `AULA14` y el estado **Presente**. Los 65 segundos transcurridos computaron como un minuto trabajado. Para una jornada prevista de 480 minutos, el balance fue de **−479 minutos**. Al repetir la asignación para el mismo período, el servidor rechazó el solapamiento.
+El 25 de noviembre de 2026, los tres escritorios Swing se conectaron al backend de Docker Compose por TCP local. Administración asignó al empleado de prueba una jornada de 08:00 a 16:00. Registro obtuvo del servidor los justificantes de entrada a las 13:23:48 UTC y de salida a las 13:24:53 UTC. Consulta diaria mostró ambos fichajes en el centro `AULA14` y el estado **Presente**. Los 65 segundos transcurridos computaron como un minuto trabajado. Para una jornada prevista de 480 minutos, el balance fue de **−479 minutos**. Al repetir la asignación para el mismo período, el servidor rechazó el solapamiento.
 
 ### Capturas de los tres módulos
 
@@ -58,7 +68,7 @@ Un turno de hospital puede empezar el lunes a las 22:00 y acabar el martes a las
 - Persistencia administrativa mediante archivos JSONL.
 - Ejecución del backend con Docker Compose.
 - Conservación de datos después de recrear el contenedor.
-- Tres aplicaciones Swing independientes para administrar empleados y horarios, registrar fichajes y consultar la asistencia por empleado y fecha.
+- Tres aplicaciones Swing independientes para administrar empleados y horarios, registrar fichajes y consultar la asistencia diaria y los fichajes de un empleado por período.
 - Pruebas automatizadas con JUnit 5 y AssertJ.
 
 **Sesión 12 · Consulta diaria e incidencias.**
@@ -278,7 +288,7 @@ Los fichajes se modelan mediante:
 
 ### Registro de entradas y salidas
 
-El caso de uso `RegisterTrackingEvent` verifica que los eventos respeten una secuencia coherente.
+El caso de uso `RegisterTrackingEvent` busca el identificador en el catálogo persistente de empleados y valida la secuencia antes de escribir el fichaje.
 
 Entre las reglas implementadas se encuentran:
 
@@ -500,12 +510,12 @@ Las operaciones se comunican mediante HTTP y JSON.
 |---|---|---|
 | GET | `/api/v1/health` | Comprueba el estado del servidor |
 | POST | `/api/v1/punches` | Registra una entrada o salida |
-| GET | `/api/v1/punches` | Consulta fichajes por empleado y fecha UTC |
+| GET | `/api/v1/punches` | Consulta fichajes por empleado y fecha o período UTC |
 | GET | `/api/v1/attendance` | Devuelve los indicadores y las incidencias del empleado para esa fecha |
 
 ### Registrar una entrada
 
-Petición `POST /api/v1/punches`:
+Da de alta primero `EMP-DEMO-001` en **Administración → Empleados** o con el ejemplo de `POST /api/v1/employees` de esta guía. Envía después esta petición a `POST /api/v1/punches`.
 
 ```json
 {
@@ -531,7 +541,13 @@ Ejemplo:
 GET /api/v1/punches?date=2026-11-11&employeeId=EMP-DEMO-001
 ```
 
-La respuesta contiene los eventos correspondientes al empleado y a la fecha UTC solicitada.
+Para ver varios días de la misma persona, usa las dos fechas del período.
+
+```text
+GET /api/v1/punches?employeeId=EMP-DEMO-001&from=2026-11-09&to=2026-11-15
+```
+
+La respuesta es una lista JSON ordenada por hora, con ambos extremos incluidos. Un intervalo sin fichajes devuelve `200` y `[]`. Mezclar `date` con `from` o `to`, omitir un extremo o invertir las fechas devuelve `400`. La consulta conserva la lectura de fichajes históricos aunque su empleado ya no figure en el catálogo.
 
 ### Endpoints administrativos
 
@@ -675,7 +691,7 @@ En el estado actual de la API, algunas referencias administrativas inexistentes 
 
 La clasificación de errores podrá refinarse cuando se complete el contrato HTTP.
 
-**Limitación de integración:** el endpoint de fichajes todavía no valida automáticamente que el empleado esté registrado en el catálogo administrativo.
+Si se intenta fichar con un código de empleado desconocido, el servidor devuelve HTTP `400` con `{"error":"BAD_REQUEST","message":"Employee does not exist"}`. El registro queda intacto. Una segunda entrada con otra todavía abierta devuelve `409`.
 
 ---
 
@@ -744,7 +760,7 @@ java -jar frontend-admin/target/control-presencia-frontend-admin-0.1.0-SNAPSHOT.
 
 `AdminPanel` recoge los datos del formulario. `AdministrationGateway` define las tres operaciones que necesita el escritorio. `HttpAdministrationGateway` construye las peticiones JSON y utiliza `HttpClient.sendAsync`. La ventana muestra el resultado en el hilo de eventos de Swing y espera la confirmación antes de permitir otro envío. El backend sigue resolviendo los duplicados, los solapamientos y las reglas de los horarios.
 
-## Aplicación de consulta diaria
+## Aplicación de consulta diaria y por período
 
 Se necesita JDK 27, Maven y un escritorio gráfico. Desde la raíz del repositorio, compila el proyecto y arranca el backend. Compose conserva el volumen de datos al reconstruir la imagen.
 
@@ -757,6 +773,8 @@ java -jar frontend-query/target/control-presencia-frontend-query-0.1.0-SNAPSHOT.
 El JAR de consulta incluye sus dependencias Jackson. Utiliza `--help` para ver las opciones. La URL indicada como argumento tiene prioridad sobre `API_BASE_URL`. El valor predeterminado es `http://localhost:7070`. El escritorio de registro tiene su propio JAR y su carpeta `lib/`.
 
 Introduce el identificador de empleado y la fecha UTC (`AAAA-MM-DD`). Pulsa **Consultar**. Los indicadores y las incidencias proceden de `GET /api/v1/attendance`, donde el servidor resuelve la asignación vigente y ejecuta `CalculateDailyAttendance`. La tabla procede de `GET /api/v1/punches` y muestra hora UTC, entrada o salida y lugar. En una jornada nocturna, el resumen del día de entrada puede incluir una salida de la madrugada siguiente. Esa salida aparece en la tabla de su propia fecha UTC.
+
+Para consultar un período, introduce el primer día en **Fecha** y el último en **Hasta**. La tabla muestra los fichajes del empleado en ese intervalo. Los indicadores y las incidencias se calculan por jornada y se ven al consultar una sola fecha.
 
 ### Contrato observado en Javalin
 
@@ -786,7 +804,7 @@ Con los mismos parámetros, `GET /api/v1/punches` devolvió ambos fichajes.
 
 ### Responsabilidades y asincronía
 
-`QueryMain` compone el adaptador `HttpAttendanceGateway`, el controlador `QueryController` y la vista `QueryPanel`. El controlador depende del puerto `AttendanceGateway`. Cada petición se envía con `HttpClient.sendAsync` y devuelve un `CompletableFuture`. Las dos respuestas se presentan de forma independiente en el hilo de eventos de Swing. El formulario se habilita cuando ambas terminan. La aplicación no modifica fichajes ni datos administrativos.
+`QueryMain` compone el adaptador `HttpAttendanceGateway`, el controlador `QueryController` y la vista `QueryPanel`. El controlador depende del puerto `AttendanceGateway`. Cada petición se envía con `HttpClient.sendAsync` y devuelve un `CompletableFuture`. En la consulta por período se solicita únicamente la lista de fichajes. En la consulta diaria las dos respuestas se presentan de forma independiente en el hilo de eventos de Swing. El formulario se habilita cuando ambas terminan. La aplicación no modifica fichajes ni datos administrativos.
 
 ### Comprobación reproducible
 
@@ -872,14 +890,14 @@ El formulario envía `employeeId`, `employeeName`, `placeId`, `placeName` y `typ
 
 Los campos vacíos y los caracteres de control se rechazan antes del envío. La API también protege los identificadores frente a caracteres de control para evitar alterar el formato de los archivos. Los conflictos de secuencia y los errores de conexión se muestran en la interfaz; los datos del formulario se conservan. El cliente no reenvía automáticamente un fichaje: tras un error de red o una respuesta no válida puede desconocerse si el servidor llegó a guardarlo. Antes de volver a fichar, consultar los registros mediante `GET /api/v1/punches`.
 
-Esta pantalla identifica al empleado mediante datos introducidos manualmente. **No proporciona autenticación ni comprueba que exista en el catálogo administrativo.** El historial diario y el resumen de asistencia se consultan en `frontend-query`.
+El usuario introduce el código manualmente y el backend comprueba que existe en el catálogo administrativo. La aplicación carece de autenticación. El historial por fecha o período y el resumen diario están disponibles en `frontend-query`.
 
 ### Recorrido manual reproducible
 
 Con el backend de prueba aislado, usar un identificador nuevo y realizar este recorrido:
 
 1. Intentar enviar con un campo obligatorio vacío: debe aparecer un error sin registrar un fichaje.
-2. Registrar una entrada y comprobar la confirmación.
+2. Intentar una entrada con el código nuevo y comprobar el rechazo por empleado desconocido. Darlo de alta en Administración, repetir la entrada y comprobar el justificante.
 3. Intentar otra entrada: debe rechazarse por conflicto.
 4. Registrar una salida y comprobar la confirmación.
 5. Consultar los dos eventos mediante la API, usando la fecha UTC de sus marcas temporales.
@@ -993,6 +1011,10 @@ El 16 de noviembre de 2026, después de que el usuario reconstruyera el backend,
 ---
 
 ## Compilación y pruebas
+
+### Verificación de la sesión 15
+
+En un clon limpio, Maven contabilizó 209 pruebas. Pasaron 165, incluidas las de catálogo, períodos UTC y reconstrucción de incidencias tras reiniciar. El entorno impidió abrir las conexiones TCP locales de las otras 44 pruebas. El recorrido Swing con Javalin en memoria completó los tres formularios y la consulta por período. La verificación completa de esta versión en un equipo con TCP local se ejecuta con `mvn clean verify`.
 
 ### Verificación del 23 de noviembre · Sesión 13
 
@@ -1148,8 +1170,6 @@ Están implementados los escritorios de administración, registro y consulta. Qu
 
 ### Integración funcional
 
-- Validar los fichajes contra el catálogo persistente de empleados.
-- Ampliar la consulta de un empleado, actualmente filtrada por una fecha UTC, a un intervalo de fechas.
 - Definir la gestión de incidencias que requieran revisión o justificación manual.
 - Incorporar una gestión completa de guardias y sus activaciones.
 - Incorporar rotaciones automáticas de varias semanas.
@@ -1180,6 +1200,6 @@ El desarrollo continuará priorizando las funcionalidades exigidas, la simplicid
 
 ---
 
-## Objetivo de las siguientes iteraciones
+## Verificar la versión de entrega
 
-Antes de la entrega queda por verificar la compilación y el arranque desde una copia limpia de la versión que se vaya a evaluar. También queda por revisar la validación de nuevos fichajes frente al catálogo, conservando la lectura de los registros anteriores.
+Desde un clon limpio de la rama que se va a evaluar, ejecuta `mvn clean verify` con JDK 27. Arranca el backend con `docker compose up -d --build` y utiliza las instrucciones de los tres escritorios de esta guía. En Consulta, busca primero un día y amplía después la fecha final para comparar los fichajes. Consulta las dos ramas con `git ls-remote origin refs/heads/main refs/heads/develop` para identificar el commit publicado.
